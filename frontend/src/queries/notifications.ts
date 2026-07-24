@@ -54,7 +54,7 @@ export function useUnreadCount() {
 export function useMarkRead() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`),
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
@@ -64,7 +64,7 @@ export function useMarkRead() {
 export function useMarkAllRead() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post("/notifications/read-all"),
+    mutationFn: () => api.post("/notifications/read-all", {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
@@ -92,7 +92,7 @@ export function useUpdateNotificationPreference() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: { type: string; in_app?: boolean; email?: boolean }) =>
-      api.put("/notifications/preferences", data),
+      api.patch("/notifications/preferences", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications", "preferences"] });
     },
