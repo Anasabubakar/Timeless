@@ -101,6 +101,14 @@ class ApiClient {
     });
   }
 
+  put<T>(endpoint: string, data: unknown, token?: string) {
+    return this.request<T>(endpoint, {
+      method: "PUT",
+      body: JSON.stringify(data),
+      token,
+    });
+  }
+
   delete<T>(endpoint: string, token?: string) {
     return this.request<T>(endpoint, { method: "DELETE", token });
   }
