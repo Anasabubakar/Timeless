@@ -107,7 +107,7 @@ export default function AnalyticsPage() {
     { name: "Total Revenue", value: formatCurrency(stats?.total_revenue ?? 0), change: "+12.3%", positive: true },
     { name: "Pipeline Value", value: formatCurrency(stats?.pipeline_value ?? 0), change: "+5.2%", positive: true },
     { name: "Conversion Rate", value: `${(stats?.conversion_rate ?? 0).toFixed(1)}%`, change: "+2.1%", positive: true },
-    { name: "Win Rate", value: `${(stats?.win_rate ?? 0).toFixed(1)}%`, change: "+0.8%", positive: stats?.win_rate > 0 },
+    { name: "Win Rate", value: `${(stats?.win_rate ?? 0).toFixed(1)}%`, change: "+0.8%", positive: (stats?.win_rate ?? 0) > 0 },
     { name: "Avg Deal Size", value: formatCurrency(stats?.avg_deal_size ?? 0), change: "+3.4%", positive: true },
     { name: "Avg Velocity", value: `${stats?.avg_deal_velocity ?? 0}d`, change: "-2d", positive: false },
     { name: "Deals Won", value: String(stats?.closed_won ?? 0), change: "+3", positive: true },
