@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -128,7 +129,7 @@ func (h *AnalyticsHandler) TimeSeries(c fiber.Ctx) error {
 	orgID := uuid.MustParse(c.Locals("org_id").(string))
 
 	metric := c.Query("metric", "sponsors")
-	period := c.QueryInt("period", 30)
+	period, _ := strconv.Atoi(c.Query("period", "30"))
 	if period < 1 {
 		period = 30
 	}

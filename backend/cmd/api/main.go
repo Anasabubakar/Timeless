@@ -49,13 +49,12 @@ func main() {
 	defer workerClient.Close()
 
 	app := fiber.New(fiber.Config{
-		AppName:               "SponsorOS API",
-		ReadTimeout:           10 * time.Second,
-		WriteTimeout:          10 * time.Second,
-		IdleTimeout:           120 * time.Second,
-		BodyLimit:             10 * 1024 * 1024,
-		DisableStartupMessage: cfg.Environment == "production",
-		ErrorHandler:          globalErrorHandler,
+		AppName:      "SponsorOS API",
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+		BodyLimit:    10 * 1024 * 1024,
+		ErrorHandler: globalErrorHandler,
 	})
 
 	app.Use(recover.New())
@@ -77,7 +76,9 @@ func main() {
 	go func() {
 		addr := ":" + cfg.Port
 		log.Printf("SponsorOS API starting on %s (env: %s)", addr, cfg.Environment)
-		if err := app.Listen(addr); err != nil {
+		if err := app.Listen(addr, fiber.ListenConfig{
+			DisableStartupMessage: cfg.Environment == "production",
+		}); err != nil {
 			log.Fatalf("server error: %v", err)
 		}
 	}()

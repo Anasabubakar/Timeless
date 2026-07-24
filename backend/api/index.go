@@ -63,13 +63,12 @@ func initApp() {
 	workerClient, _ := worker.NewClient(cfg)
 
 	app = fiber.New(fiber.Config{
-		AppName:               "SponsorOS API",
-		ReadTimeout:           30 * time.Second,
-		WriteTimeout:          30 * time.Second,
-		IdleTimeout:           30 * time.Second,
-		BodyLimit:             10 * 1024 * 1024,
-		DisableStartupMessage: true,
-		ErrorHandler:          globalErrorHandler,
+		AppName:      "SponsorOS API",
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  30 * time.Second,
+		BodyLimit:    10 * 1024 * 1024,
+		ErrorHandler: globalErrorHandler,
 	})
 
 	app.Use(recover.New())

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -33,7 +34,10 @@ func (h *SearchHandler) Search(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "query parameter 'q' is required")
 	}
 
-	limit := c.QueryInt("limit", 20)
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	if limit <= 0 {
+		limit = 20
+	}
 	if limit > 50 {
 		limit = 50
 	}
