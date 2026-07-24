@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Filter, Mail, Phone, Calendar, MessageSquare, FileText, Zap } from "lucide-react";
 import { useActivities } from "@/queries/activities";
 import type { Activity } from "@/types";
+import { motion } from "motion/react";
 
 const TYPE_ICONS: Record<string, any> = {
   email: Mail,
@@ -30,7 +31,7 @@ export default function ActivitiesPage() {
   const activities: Activity[] = (data as any)?.activities || [];
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Activity</h1>
@@ -117,6 +118,6 @@ export default function ActivitiesPage() {
           })}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
