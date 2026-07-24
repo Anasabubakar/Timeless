@@ -29,7 +29,7 @@ const QUERY_INVALIDATION_MAP: Record<EventType, string[]> = {
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const queryClient = useQueryClient();
-  const token = useAuthStore((s) => s.accessToken);
+  const token = useAuthStore((s) => s.tokens?.access_token);
 
   const connect = useCallback(() => {
     if (!token) return;
