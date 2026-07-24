@@ -4,6 +4,7 @@ import { Plus, Send, Clock, CheckCircle, XCircle, Mail, Loader2 } from "lucide-r
 import { cn } from "@/lib/utils";
 import { useSequences } from "@/queries/outreach";
 import { useCommunications } from "@/queries/communications";
+import { motion } from "motion/react";
 
 const statusConfig: Record<string, { icon: typeof Send; color: string; label: string }> = {
   draft: { icon: Clock, color: "text-neutral-500", label: "Draft" },
@@ -39,7 +40,7 @@ export default function OutreachPage() {
   const communications = commData?.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Outreach</h1>
@@ -152,6 +153,6 @@ export default function OutreachPage() {
           </table>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
