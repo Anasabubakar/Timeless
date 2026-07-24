@@ -32,7 +32,10 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 
 	user, tokens, err := h.svc.Register(c.Context(), input)
 	if err != nil {
-		return fiber.NewError(fiber.StatusConflict, err.Error())
+		if err.Error() == "email already registered" {
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{

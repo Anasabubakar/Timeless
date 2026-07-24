@@ -55,6 +55,10 @@ func initApp() {
 		panic("postgres: " + err.Error())
 	}
 
+	if err := database.AutoMigrate(db); err != nil {
+		panic("migrate: " + err.Error())
+	}
+
 	rdb, err := database.NewRedis(cfg)
 	if err != nil {
 		panic("redis: " + err.Error())

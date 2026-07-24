@@ -6,6 +6,15 @@ import { Toaster } from "sonner";
 export const metadata: Metadata = {
   title: "SponsorOS — Sponsorship Intelligence Platform",
   description: "AI-powered sponsorship intelligence and operations platform",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon.png", type: "image/png", sizes: "32x32" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({

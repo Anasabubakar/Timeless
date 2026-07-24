@@ -31,10 +31,10 @@ func main() {
 		log.Fatalf("failed to connect to postgres: %v", err)
 	}
 
-	if cfg.Environment != "production" {
-		if err := database.AutoMigrate(db); err != nil {
-			log.Fatalf("failed to run auto-migration: %v", err)
-		}
+	// Always migrate on boot so fresh Render/Neon databases get schema.
+	// GORM AutoMigrate is additive and safe for repeated runs.
+	if err := database.AutoMigrate(db); err != nil {
+		log.Fatalf("failed to run auto-migration: %v", err)
 	}
 
 	rdb, err := database.NewRedis(cfg)
