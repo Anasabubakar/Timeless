@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAutomations, useToggleAutomation, type Automation } from "@/queries/automations";
+import { motion } from "motion/react";
 
 function formatLastRun(dateStr?: string): string {
   if (!dateStr) return "Never";
@@ -25,7 +26,7 @@ export default function AutomationsPage() {
   const automations: Automation[] = data?.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Automations</h1>
@@ -111,6 +112,6 @@ export default function AutomationsPage() {
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
