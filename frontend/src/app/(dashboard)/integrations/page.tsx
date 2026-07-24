@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useIntegrations, type Integration } from "@/queries/integrations";
+import { motion } from "motion/react";
 
 const STATUS_CONFIG: Record<string, { icon: typeof Check; color: string; label: string }> = {
   active: { icon: Check, color: "bg-emerald-50 text-emerald-700", label: "Connected" },
@@ -39,7 +40,7 @@ export default function IntegrationsPage() {
   const integrations: Integration[] = data?.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Integrations</h1>
@@ -113,6 +114,6 @@ export default function IntegrationsPage() {
           })}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
