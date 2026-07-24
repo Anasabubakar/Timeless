@@ -65,12 +65,12 @@ func (s *ProposalService) Generate(ctx context.Context, orgID uuid.UUID, userID 
 		return nil, fmt.Errorf("AI provider not configured")
 	}
 
-	sponsor, err := s.sponsorRepo.GetByID(ctx, orgID, input.SponsorID)
+	sponsor, err := s.sponsorRepo.FindByID(ctx, orgID, input.SponsorID)
 	if err != nil {
 		return nil, fmt.Errorf("sponsor not found: %w", err)
 	}
 
-	company, err := s.companyRepo.GetByID(ctx, orgID, sponsor.CompanyID)
+	company, err := s.companyRepo.FindByID(ctx, orgID, sponsor.CompanyID)
 	if err != nil {
 		return nil, fmt.Errorf("company not found: %w", err)
 	}
