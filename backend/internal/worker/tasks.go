@@ -78,13 +78,14 @@ func (h *Handlers) HandleAIResearch(ctx context.Context, t *asynq.Task) error {
 		"entity_id", payload.EntityID,
 	)
 
+	entityID := uuidFromString(payload.EntityID)
 	h.db.WithContext(ctx).Create(&models.Activity{
 		OrganizationID: uuidFromString(payload.OrgID),
-		UserID:         uuidFromString(payload.UserID),
+		UserID:         uuidPtrFromString(payload.UserID),
 		Type:           "ai_research",
 		Subject:        "AI research completed",
 		EntityType:     payload.EntityType,
-		EntityID:       payload.EntityID,
+		EntityID:       &entityID,
 	})
 	return nil
 }
@@ -191,7 +192,7 @@ func (h *Handlers) HandleCompanyEnrich(ctx context.Context, t *asynq.Task) error
 		Type:           "company_enriched",
 		Subject:        fmt.Sprintf("Company '%s' enriched", company.Name),
 		EntityType:     "company",
-		EntityID:       companyID,
+		EntityID:       uuidFromString(companyID),
 	})
 
 	h.logger.Info("company enrichment complete", "company_id", companyID, "fields_updated", len(updates))
@@ -389,11 +390,11 @@ func (h *Handlers) HandleEmailSend(ctx context.Context, t *asynq.Task) error {
 
 	h.db.WithContext(ctx).Create(&models.Activity{
 		OrganizationID: uuidFromString(orgID),
-		UserID:         uuidFromString(payload.UserID),
+		UserID:         uuidPtrFromString(payload.UserID),
 		Type:           "email_sent",
 		Subject:        fmt.Sprintf("Email sent to %s: %s", to, subject),
 		EntityType:     payload.EntityType,
-		EntityID:       payload.EntityID,
+		EntityID:       uuidPtrFromString(payload.EntityID),
 	})
 	return nil
 }

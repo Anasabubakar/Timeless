@@ -13,6 +13,14 @@ func uuidFromString(s string) uuid.UUID {
 	return id
 }
 
+func uuidPtrFromString(s string) *uuid.UUID {
+	if s == "" {
+		return nil
+	}
+	id, _ := uuid.Parse(s)
+	return &id
+}
+
 type EmailPayload struct {
 	OrgID    string   `json:"org_id"`
 	To       []string `json:"to"`
