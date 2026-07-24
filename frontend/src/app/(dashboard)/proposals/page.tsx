@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Select, Textarea } from "@/components/ui/select";
 import { useProposals, useGenerateProposal } from "@/queries/proposals";
 import { useSponsors } from "@/queries/sponsors";
-import type { Proposal } from "@/types";
+import type { Proposal, Sponsor } from "@/types";
+import { motion } from "motion/react";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-neutral-100 text-neutral-700",
@@ -29,7 +30,7 @@ function GenerateDialog({ open, onClose }: { open: boolean; onClose: () => void 
   const { data: sponsorsData } = useSponsors();
   const generate = useGenerateProposal();
 
-  const sponsors = sponsorsData?.data ?? [];
+  const sponsors = (Array.isArray(sponsorsData?.data) ? sponsorsData.data : []) as Sponsor[];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -107,7 +108,7 @@ export default function ProposalsPage() {
   const proposals: Proposal[] = data?.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Proposals</h1>
@@ -177,6 +178,6 @@ export default function ProposalsPage() {
       )}
 
       <GenerateDialog open={showGenerate} onClose={() => setShowGenerate(false)} />
-    </div>
+    </motion.div>
   );
 }
