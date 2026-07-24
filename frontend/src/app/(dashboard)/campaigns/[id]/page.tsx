@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useCampaign } from "@/queries/campaigns";
 import { useSponsors, useUpdateSponsorStage } from "@/queries/sponsors";
 import type { Sponsor } from "@/types";
+import { motion } from "motion/react";
 
 const DEFAULT_STAGES = ["prospect", "contacted", "meeting", "proposal", "negotiation", "closed_won", "closed_lost"];
 
@@ -53,7 +54,7 @@ export default function CampaignDetailPage() {
     : 0;
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center gap-3">
         <Link
           href="/campaigns"
@@ -107,7 +108,7 @@ export default function CampaignDetailPage() {
         </div>
         <KanbanBoard stages={stages} sponsors={sponsors} />
       </div>
-    </div>
+    </motion.div>
   );
 }
 
