@@ -1,12 +1,14 @@
 "use client";
 
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useAuthStore } from "@/stores/auth";
 import { getInitials } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
 
 export function Topbar() {
   const { user } = useAuthStore();
+  const { theme, setTheme } = useTheme();
   const initials = user ? getInitials(`${user.first_name} ${user.last_name}`) : "?";
 
   return (
@@ -25,6 +27,13 @@ export function Topbar() {
         <button className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90">
           <Plus className="h-3.5 w-3.5" />
           New
+        </button>
+
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-input bg-muted/50 text-muted-foreground transition-colors hover:bg-muted"
+        >
+          {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </button>
 
         <NotificationBell />
