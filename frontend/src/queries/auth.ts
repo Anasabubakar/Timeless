@@ -60,7 +60,7 @@ export function useRefreshToken() {
         refresh_token: tokens?.refresh_token,
       }),
     onSuccess: (data) => {
-      setTokens({ access_token: data.access_token, refresh_token: data.refresh_token });
+      setTokens({ access_token: data.access_token, refresh_token: data.refresh_token, expires_at: 0 });
     },
   });
 }
