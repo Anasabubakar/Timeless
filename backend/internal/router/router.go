@@ -276,6 +276,17 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	protected.Post("/contacts/batch/update", batchHandler.BatchUpdate("contacts"))
 	protected.Post("/contacts/batch/delete", batchHandler.BatchDelete("contacts"))
 
+	// Import routes
+	importHandler := handler.NewImportHandler(db)
+	importGroup := protected.Group("/import")
+	importGroup.Post("/sponsors", func(c fiber.Ctx) error { c.Locals("entity", "sponsors"); return importHandler.Import(c) })
+	importGroup.Post("/contacts", func(c fiber.Ctx) error { c.Locals("entity", "contacts"); return importHandler.Import(c) })
+	importGroup.Post("/companies", func(c fiber.Ctx) error { c.Locals("entity", "companies"); return importHandler.Import(c) })
+
+	protected.Post("/import/sponsors", func(c fiber.Ctx) error { c.Locals("entity", "sponsors"); return importHandler.Import(c) })
+	protected.Post("/import/contacts", func(c fiber.Ctx) error { c.Locals("entity", "contacts"); return importHandler.Import(c) })
+	protected.Post("/import/companies", func(c fiber.Ctx) error { c.Locals("entity", "companies"); return importHandler.Import(c) })
+
 	// Team Management
 	teamHandler := handler.NewTeamHandler(db)
 	team := protected.Group("/team")
