@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sponsoros/backend/internal/ai/provider"
+	"github.com/timeless/backend/internal/ai/provider"
 )
 
 type MeetingAgent struct {

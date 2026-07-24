@@ -142,7 +142,7 @@ function WebhookSettings() {
     <div className="space-y-6">
       <SettingsSection title="Webhooks">
         <p className="text-xs text-muted-foreground">
-          Webhooks notify external systems when events happen in SponsorOS.
+          Webhooks notify external systems when events happen in Timeless.
           Configure endpoints to receive real-time event payloads with HMAC-SHA256 signed requests.
         </p>
 
@@ -1035,7 +1035,7 @@ function ApiSettings() {
     <div className="space-y-6">
       <SettingsSection title="API Keys">
         <p className="text-xs text-muted-foreground">
-          API keys allow external systems to access SponsorOS programmatically.
+          API keys allow external systems to access Timeless programmatically.
         </p>
         <button className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
           Generate New Key

@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sponsoros/backend/internal/ai/provider"
-	"github.com/sponsoros/backend/internal/models"
-	"github.com/sponsoros/backend/internal/repository"
+	"github.com/timeless/backend/internal/ai/provider"
+	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/repository"
 )
 
 type ProposalService struct {

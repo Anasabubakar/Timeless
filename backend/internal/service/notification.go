@@ -5,9 +5,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sponsoros/backend/internal/models"
-	"github.com/sponsoros/backend/internal/realtime"
-	"github.com/sponsoros/backend/internal/repository"
+	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/realtime"
+	"github.com/timeless/backend/internal/repository"
 )
 
 type NotificationService struct {

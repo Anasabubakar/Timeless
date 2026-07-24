@@ -11,9 +11,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
-	"github.com/sponsoros/backend/internal/config"
-	"github.com/sponsoros/backend/internal/models"
-	"github.com/sponsoros/backend/internal/repository"
+	"github.com/timeless/backend/internal/config"
+	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/repository"
 )
 
 type AuthService struct {

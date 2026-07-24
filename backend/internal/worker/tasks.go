@@ -19,7 +19,7 @@ import (
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 
-	"github.com/sponsoros/backend/internal/models"
+	"github.com/timeless/backend/internal/models"
 )
 
 const (
@@ -496,10 +496,10 @@ func (h *Handlers) deliverWebhook(ctx context.Context, webhook *models.Webhook, 
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-SponsorOS-Signature", sig)
-		req.Header.Set("X-SponsorOS-Event", delivery.Event)
-		req.Header.Set("X-SponsorOS-Delivery", delivery.ID.String())
-		req.Header.Set("User-Agent", "SponsorOS-Webhook/1.0")
+		req.Header.Set("X-Timeless-Signature", sig)
+		req.Header.Set("X-Timeless-Event", delivery.Event)
+		req.Header.Set("X-Timeless-Delivery", delivery.ID.String())
+		req.Header.Set("User-Agent", "Timeless-Webhook/1.0")
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)

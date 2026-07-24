@@ -42,7 +42,7 @@ export default function LoginPage() {
         </div>
         <h1 className="text-xl font-semibold">Welcome back</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Sign in to your SponsorOS account
+          Sign in to your Timeless account
         </p>
       </div>
 

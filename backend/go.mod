@@ -1,4 +1,4 @@
-module github.com/sponsoros/backend
+module github.com/timeless/backend
 
 go 1.23
 

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/sponsoros/backend/internal/ai/provider"
+	"github.com/timeless/backend/internal/ai/provider"
 )
 
 type AgentType string

@@ -1,4 +1,4 @@
-# SponsorOS
+# Timeless
 
 AI-powered Sponsorship Intelligence & Operations Platform. Multi-tenant SaaS that automates sponsor research, qualification, outreach, proposal generation, and pipeline management.
 

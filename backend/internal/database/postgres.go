@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/sponsoros/backend/internal/config"
+	"github.com/timeless/backend/internal/config"
 )
 
 func NewPostgres(cfg *config.Config) (*gorm.DB, error) {

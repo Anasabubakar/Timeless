@@ -21,7 +21,7 @@ func NewOpenRouter(apiKey string) *OpenRouter {
 		apiKey:  apiKey,
 		baseURL: "https://openrouter.ai/api/v1",
 		client:  &http.Client{},
-		appName: "SponsorOS",
+		appName: "Timeless",
 	}
 }
 
@@ -74,7 +74,7 @@ func (o *OpenRouter) Complete(ctx context.Context, req *CompletionRequest) (*Com
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+o.apiKey)
-	httpReq.Header.Set("HTTP-Referer", "https://sponsoros.app")
+	httpReq.Header.Set("HTTP-Referer", "https://timeless.app")
 	httpReq.Header.Set("X-Title", o.appName)
 
 	resp, err := o.client.Do(httpReq)

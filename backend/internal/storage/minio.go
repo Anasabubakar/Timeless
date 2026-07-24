@@ -11,7 +11,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
-	"github.com/sponsoros/backend/internal/config"
+	"github.com/timeless/backend/internal/config"
 )
 
 type Storage interface {

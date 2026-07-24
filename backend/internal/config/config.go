@@ -34,12 +34,12 @@ type Config struct {
 	SMTPUser     string `env:"SMTP_USER"`
 	SMTPPassword string `env:"SMTP_PASSWORD"`
 	SMTPFrom     string `env:"SMTP_FROM"`
-	SMTPFromName string `env:"SMTP_FROM_NAME" envDefault:"SponsorOS"`
+	SMTPFromName string `env:"SMTP_FROM_NAME" envDefault:"Timeless"`
 	SMTPUseTLS   bool   `env:"SMTP_USE_TLS" envDefault:"false"`
 	SendGridKey  string `env:"SENDGRID_API_KEY"`
 
 	S3Endpoint  string `env:"S3_ENDPOINT"`
-	S3Bucket    string `env:"S3_BUCKET" envDefault:"sponsoros"`
+	S3Bucket    string `env:"S3_BUCKET" envDefault:"timeless"`
 	S3AccessKey string `env:"S3_ACCESS_KEY"`
 	S3SecretKey string `env:"S3_SECRET_KEY"`
 	S3UseSSL    bool   `env:"S3_USE_SSL" envDefault:"false"`

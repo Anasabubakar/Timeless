@@ -24,7 +24,7 @@ export const useAuthStore = create<AuthState>()(
         set({ user: null, tokens: null, isAuthenticated: false }),
     }),
     {
-      name: "sponsoros-auth",
+      name: "timeless-auth",
       partialize: (state) => ({
         user: state.user,
         tokens: state.tokens,

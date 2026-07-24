@@ -3,9 +3,9 @@ package handler
 import (
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/sponsoros/backend/internal/email"
-	"github.com/sponsoros/backend/internal/middleware"
-	"github.com/sponsoros/backend/internal/worker"
+	"github.com/timeless/backend/internal/email"
+	"github.com/timeless/backend/internal/middleware"
+	"github.com/timeless/backend/internal/worker"
 )
 
 type EmailHandler struct {

@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"github.com/sponsoros/backend/internal/models"
+	"github.com/timeless/backend/internal/models"
 )
 
 type RBACMiddleware struct {

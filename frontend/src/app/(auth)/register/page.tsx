@@ -55,7 +55,7 @@ export default function RegisterPage() {
         </div>
         <h1 className="text-xl font-semibold">Create your account</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Get started with SponsorOS
+          Get started with Timeless
         </p>
       </div>
 

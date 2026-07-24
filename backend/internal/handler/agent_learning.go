@@ -4,8 +4,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
-	"github.com/sponsoros/backend/internal/ai/agent"
-	"github.com/sponsoros/backend/internal/middleware"
+	"github.com/timeless/backend/internal/ai/agent"
+	"github.com/timeless/backend/internal/middleware"
 )
 
 type AgentLearningHandler struct {

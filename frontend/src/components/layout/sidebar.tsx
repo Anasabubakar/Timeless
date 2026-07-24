@@ -46,7 +46,7 @@ export function Sidebar() {
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
           <span className="text-xs font-bold text-primary-foreground">S</span>
         </div>
-        <span className="text-sm font-semibold tracking-tight">SponsorOS</span>
+        <span className="text-sm font-semibold tracking-tight">Timeless</span>
       </div>
 
       <nav className="flex flex-col gap-0.5 p-3">

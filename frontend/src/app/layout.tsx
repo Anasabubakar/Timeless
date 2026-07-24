@@ -4,7 +4,7 @@ import { Providers } from "./providers";
 import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
-  title: "SponsorOS — Sponsorship Intelligence Platform",
+  title: "Timeless — Sponsorship Intelligence Platform",
   description: "AI-powered sponsorship intelligence and operations platform",
   icons: {
     icon: [

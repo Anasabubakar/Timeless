@@ -6,7 +6,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
-	"github.com/sponsoros/backend/internal/config"
+	"github.com/timeless/backend/internal/config"
 )
 
 // Client wraps asynq.Client for enqueuing background tasks from the API server.

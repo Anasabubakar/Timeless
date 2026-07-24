@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sponsoros/backend/internal/models"
-	"github.com/sponsoros/backend/internal/repository"
-	"github.com/sponsoros/backend/internal/worker"
+	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/repository"
+	"github.com/timeless/backend/internal/worker"
 )
 
 type WebhookService struct {
@@ -99,7 +99,7 @@ func (s *WebhookService) TestWebhook(ctx context.Context, orgID, webhookID uuid.
 
 	testData := map[string]interface{}{
 		"event":  "test.ping",
-		"source": "sponsoros",
+		"source": "timeless",
 	}
 	testPayload, _ := json.Marshal(testData)
 	_ = testPayload

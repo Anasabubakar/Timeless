@@ -8,8 +8,8 @@ import (
 
 	"github.com/hibiken/asynq"
 
-	"github.com/sponsoros/backend/internal/ai/memory"
-	"github.com/sponsoros/backend/internal/ai/provider"
+	"github.com/timeless/backend/internal/ai/memory"
+	"github.com/timeless/backend/internal/ai/provider"
 	"gorm.io/gorm"
 )
 

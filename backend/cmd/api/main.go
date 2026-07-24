@@ -14,10 +14,10 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 
-	"github.com/sponsoros/backend/internal/config"
-	"github.com/sponsoros/backend/internal/database"
-	"github.com/sponsoros/backend/internal/router"
-	"github.com/sponsoros/backend/internal/worker"
+	"github.com/timeless/backend/internal/config"
+	"github.com/timeless/backend/internal/database"
+	"github.com/timeless/backend/internal/router"
+	"github.com/timeless/backend/internal/worker"
 )
 
 func main() {
@@ -49,7 +49,7 @@ func main() {
 	defer workerClient.Close()
 
 	app := fiber.New(fiber.Config{
-		AppName:      "SponsorOS API",
+		AppName:      "Timeless API",
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -75,7 +75,7 @@ func main() {
 
 	go func() {
 		addr := ":" + cfg.Port
-		log.Printf("SponsorOS API starting on %s (env: %s)", addr, cfg.Environment)
+		log.Printf("Timeless API starting on %s (env: %s)", addr, cfg.Environment)
 		if err := app.Listen(addr, fiber.ListenConfig{
 			DisableStartupMessage: cfg.Environment == "production",
 		}); err != nil {

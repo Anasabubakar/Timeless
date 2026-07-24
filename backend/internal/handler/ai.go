@@ -2,7 +2,7 @@ package handler
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"github.com/sponsoros/backend/internal/ai/agent"
+	"github.com/timeless/backend/internal/ai/agent"
 )
 
 type AIHandler struct {

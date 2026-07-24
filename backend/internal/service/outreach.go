@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sponsoros/backend/internal/models"
-	"github.com/sponsoros/backend/internal/repository"
+	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/repository"
 )
 
 type OutreachService struct {

@@ -5,24 +5,24 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
-	"github.com/sponsoros/backend/internal/ai/agent"
-	"github.com/sponsoros/backend/internal/ai/memory"
-	"github.com/sponsoros/backend/internal/ai/provider"
-	"github.com/sponsoros/backend/internal/config"
-	"github.com/sponsoros/backend/internal/email"
-	"github.com/sponsoros/backend/internal/handler"
-	"github.com/sponsoros/backend/internal/middleware"
-	"github.com/sponsoros/backend/internal/realtime"
-	"github.com/sponsoros/backend/internal/repository"
-	"github.com/sponsoros/backend/internal/service"
-	"github.com/sponsoros/backend/internal/storage"
-	"github.com/sponsoros/backend/internal/worker"
+	"github.com/timeless/backend/internal/ai/agent"
+	"github.com/timeless/backend/internal/ai/memory"
+	"github.com/timeless/backend/internal/ai/provider"
+	"github.com/timeless/backend/internal/config"
+	"github.com/timeless/backend/internal/email"
+	"github.com/timeless/backend/internal/handler"
+	"github.com/timeless/backend/internal/middleware"
+	"github.com/timeless/backend/internal/realtime"
+	"github.com/timeless/backend/internal/repository"
+	"github.com/timeless/backend/internal/service"
+	"github.com/timeless/backend/internal/storage"
+	"github.com/timeless/backend/internal/worker"
 )
 
 func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerClient *worker.Client) {
 	// Health check
 	app.Get("/health", func(c fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "ok", "service": "sponsoros-api"})
+		return c.JSON(fiber.Map{"status": "ok", "service": "timeless-api"})
 	})
 
 	// Middleware instances

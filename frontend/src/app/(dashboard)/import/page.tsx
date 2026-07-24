@@ -100,7 +100,7 @@ export default function ImportPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Import CSV</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Upload a CSV file to bulk import records into SponsorOS. The first row
+          Upload a CSV file to bulk import records into Timeless. The first row
           must be column headers.
         </p>
       </div>

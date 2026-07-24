@@ -7,7 +7,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
-	"github.com/sponsoros/backend/internal/email"
+	"github.com/timeless/backend/internal/email"
 )
 
 const TaskEmailDeliver = "email:deliver"

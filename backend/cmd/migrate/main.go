@@ -4,8 +4,8 @@ import (
 	"flag"
 	"log"
 
-	"github.com/sponsoros/backend/internal/config"
-	"github.com/sponsoros/backend/internal/database"
+	"github.com/timeless/backend/internal/config"
+	"github.com/timeless/backend/internal/database"
 )
 
 func main() {

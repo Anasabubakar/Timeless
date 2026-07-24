@@ -7,8 +7,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/sponsoros/backend/internal/middleware"
-	"github.com/sponsoros/backend/internal/storage"
+	"github.com/timeless/backend/internal/middleware"
+	"github.com/timeless/backend/internal/storage"
 )
 
 var allowedMimeTypes = map[string]bool{

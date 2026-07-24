@@ -1,4 +1,4 @@
--- SponsorOS Full Schema Migration
+-- Timeless Full Schema Migration
 -- Multi-tenant SaaS database with pgvector support
 
 -- Enable extensions

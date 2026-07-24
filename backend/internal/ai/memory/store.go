@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sponsoros/backend/internal/ai/provider"
+	"github.com/timeless/backend/internal/ai/provider"
 	"gorm.io/gorm"
 )
 

@@ -11,10 +11,10 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 
-	"github.com/sponsoros/backend/internal/config"
-	"github.com/sponsoros/backend/internal/database"
-	"github.com/sponsoros/backend/internal/router"
-	"github.com/sponsoros/backend/internal/worker"
+	"github.com/timeless/backend/internal/config"
+	"github.com/timeless/backend/internal/database"
+	"github.com/timeless/backend/internal/router"
+	"github.com/timeless/backend/internal/worker"
 )
 
 var (
@@ -67,7 +67,7 @@ func initApp() {
 	workerClient, _ := worker.NewClient(cfg)
 
 	app = fiber.New(fiber.Config{
-		AppName:      "SponsorOS API",
+		AppName:      "Timeless API",
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  30 * time.Second,

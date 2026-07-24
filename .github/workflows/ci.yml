@@ -35,9 +35,9 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: sponsoros
-          POSTGRES_PASSWORD: sponsoros
-          POSTGRES_DB: sponsoros_test
+          POSTGRES_USER: timeless
+          POSTGRES_PASSWORD: timeless
+          POSTGRES_DB: timeless_test
         ports:
           - 5432:5432
         options: >-
@@ -58,7 +58,7 @@ jobs:
       run:
         working-directory: ./backend
     env:
-      DATABASE_URL: postgres://sponsoros:sponsoros@localhost:5432/sponsoros_test?sslmode=disable
+      DATABASE_URL: postgres://timeless:timeless@localhost:5432/timeless_test?sslmode=disable
       REDIS_URL: localhost:6379
       JWT_SECRET: test-secret-key
     steps:
@@ -131,6 +131,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build backend image
-        run: docker build -f docker/backend.Dockerfile -t sponsoros-api:latest ./backend
+        run: docker build -f docker/backend.Dockerfile -t timeless-api:latest ./backend
       - name: Build frontend image
-        run: docker build -f docker/frontend.Dockerfile -t sponsoros-web:latest ./frontend
+        run: docker build -f docker/frontend.Dockerfile -t timeless-web:latest ./frontend

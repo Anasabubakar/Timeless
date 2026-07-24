@@ -4,8 +4,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/sponsoros/backend/internal/middleware"
-	"github.com/sponsoros/backend/internal/repository"
+	"github.com/timeless/backend/internal/middleware"
+	"github.com/timeless/backend/internal/repository"
 )
 
 type ProfileHandler struct {

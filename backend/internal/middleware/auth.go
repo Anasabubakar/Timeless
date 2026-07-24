@@ -6,7 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/sponsoros/backend/internal/config"
+	"github.com/timeless/backend/internal/config"
 )
 
 type AuthMiddleware struct {

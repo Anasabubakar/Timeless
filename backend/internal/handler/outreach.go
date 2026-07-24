@@ -4,9 +4,9 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
-	"github.com/sponsoros/backend/internal/middleware"
-	"github.com/sponsoros/backend/internal/models"
-	"github.com/sponsoros/backend/internal/service"
+	"github.com/timeless/backend/internal/middleware"
+	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/service"
 )
 
 type OutreachHandler struct {
