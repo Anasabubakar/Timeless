@@ -57,6 +57,7 @@ type StreamChunk struct {
 	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`
 	FinishReason string     `json:"finish_reason,omitempty"`
 	Done         bool       `json:"done"`
+	Error        error      `json:"-"`
 }
 
 type Provider interface {
