@@ -78,14 +78,13 @@ func (h *Handlers) HandleAIResearch(ctx context.Context, t *asynq.Task) error {
 		"entity_id", payload.EntityID,
 	)
 
-	entityID := uuidFromString(payload.EntityID)
 	h.db.WithContext(ctx).Create(&models.Activity{
 		OrganizationID: uuidFromString(payload.OrgID),
 		UserID:         uuidPtrFromString(payload.UserID),
 		Type:           "ai_research",
 		Subject:        "AI research completed",
 		EntityType:     payload.EntityType,
-		EntityID:       &entityID,
+		EntityID:       uuidFromString(payload.EntityID),
 	})
 	return nil
 }
@@ -394,7 +393,7 @@ func (h *Handlers) HandleEmailSend(ctx context.Context, t *asynq.Task) error {
 		Type:           "email_sent",
 		Subject:        fmt.Sprintf("Email sent to %s: %s", to, subject),
 		EntityType:     payload.EntityType,
-		EntityID:       uuidPtrFromString(payload.EntityID),
+		EntityID:       uuidFromString(payload.EntityID),
 	})
 	return nil
 }
