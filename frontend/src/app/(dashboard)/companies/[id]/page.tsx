@@ -7,6 +7,7 @@ import { useCompany } from "@/queries/companies";
 import { useSponsors } from "@/queries/sponsors";
 import { useContacts } from "@/queries/contacts";
 import type { Sponsor, Contact } from "@/types";
+import { motion } from "motion/react";
 
 export default function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -44,7 +45,7 @@ export default function CompanyDetailPage() {
   const c = company as any;
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center gap-3">
         <Link
           href="/companies"
@@ -220,7 +221,7 @@ export default function CompanyDetailPage() {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
