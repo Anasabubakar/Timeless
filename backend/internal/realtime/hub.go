@@ -2,11 +2,13 @@ package realtime
 
 import (
 	"encoding/json"
+	"net/http"
 	"sync"
 	"time"
 
-	"github.com/gofiber/websocket"
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/adaptor"
+	"github.com/gorilla/websocket"
 	"github.com/google/uuid"
 )
 
@@ -42,6 +44,10 @@ type Hub struct {
 	broadcast  chan *Event
 	register   chan *Client
 	unregister chan *Client
+}
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
 func NewHub() *Hub {
@@ -102,18 +108,24 @@ func (h *Hub) Publish(event *Event) {
 	h.broadcast <- event
 }
 
+// WebSocketHandler returns a Fiber handler using gorilla/websocket via adaptor
 func (h *Hub) WebSocketHandler() fiber.Handler {
-	return websocket.New(func(c *websocket.Conn) {
-		orgID := c.Locals("org_id")
+	httpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		orgID := r.Context().Value("org_id")
 		if orgID == nil {
-			c.Close()
+			http.Error(w, "unauthorized", 401)
+			return
+		}
+
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
 			return
 		}
 
 		client := &Client{
 			ID:    uuid.New().String(),
 			OrgID: orgID.(string),
-			Conn:  c,
+			Conn:  conn,
 			Send:  make(chan []byte, 256),
 		}
 
@@ -122,19 +134,21 @@ func (h *Hub) WebSocketHandler() fiber.Handler {
 
 		go func() {
 			for msg := range client.Send {
-				if err := c.WriteMessage(websocket.TextMessage, msg); err != nil {
+				if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 					return
 				}
 			}
 		}()
 
 		for {
-			_, _, err := c.ReadMessage()
+			_, _, err := conn.ReadMessage()
 			if err != nil {
 				break
 			}
 		}
 	})
+
+	return adaptor.HTTPHandler(httpHandler)
 }
 
 func (h *Hub) SSEHandler() fiber.Handler {

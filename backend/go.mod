@@ -4,10 +4,10 @@ go 1.23
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
-	github.com/gofiber/websocket v0.5.1
 	github.com/gofiber/fiber/v3 v3.0.0-beta.4
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.1
 	github.com/hibiken/asynq v0.25.1
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9

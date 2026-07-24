@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sponsoros/backend/internal/ai/provider"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type NodeType string
@@ -126,7 +127,7 @@ func (s *Store) SearchMemories(ctx context.Context, orgID uuid.UUID, query strin
 	var memories []MemoryEntry
 	err = s.db.WithContext(ctx).
 		Where("organization_id = ?", orgID).
-		Order("embedding <=> ?", embResp.Embeddings[0]).
+		Order(gorm.Expr("embedding <=> ?", embResp.Embeddings[0])).
 		Limit(limit).
 		Find(&memories).Error
 
@@ -185,7 +186,7 @@ func (s *Store) SearchNodes(ctx context.Context, orgID uuid.UUID, query string, 
 	}
 
 	var nodes []KnowledgeNode
-	err = q.Order("embedding <=> ?", embResp.Embeddings[0]).
+	err = q.Order(gorm.Expr("embedding <=> ?", embResp.Embeddings[0])).
 		Limit(limit).
 		Find(&nodes).Error
 
