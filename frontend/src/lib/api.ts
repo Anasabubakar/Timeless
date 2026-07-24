@@ -42,7 +42,7 @@ class ApiClient {
           });
           if (refreshRes.ok) {
             const data = await refreshRes.json();
-            setTokens({ access_token: data.access_token, refresh_token: data.refresh_token });
+            setTokens({ access_token: data.access_token, refresh_token: data.refresh_token, expires_at: 0 });
             const retryRes = await fetch(`${this.baseUrl}${endpoint}`, {
               ...rest,
               headers: {
