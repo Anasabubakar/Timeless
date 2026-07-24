@@ -22,8 +22,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
+  ArrowRight,
   Clock,
 } from "lucide-react";
+import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";
 import {
   useCurrentOrganization,
@@ -42,8 +44,12 @@ import {
   type Webhook as WebhookType,
   type WebhookDelivery,
 } from "@/queries/webhooks";
+import {
+  useNotificationPreferences,
+  useUpdateNotificationPreference,
+} from "@/queries/notifications";
 
-type Tab = "organization" | "profile" | "team" | "notifications" | "api" | "webhooks";
+type Tab = "organization" | "profile" | "team" | "notifications" | "api" | "webhooks" | "danger" | "integrations";
 
 const WEBHOOK_EVENTS = [
   { value: "sponsor.created", label: "Sponsor Created" },
@@ -73,6 +79,8 @@ export default function SettingsPage() {
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "api", label: "API Keys", icon: Key },
     { id: "webhooks", label: "Webhooks", icon: Webhook },
+    { id: "integrations", label: "Integrations", icon: Key },
+    { id: "danger", label: "Danger Zone", icon: AlertTriangle },
   ];
 
   return (
@@ -109,6 +117,8 @@ export default function SettingsPage() {
           {tab === "notifications" && <NotificationSettings />}
           {tab === "api" && <ApiSettings />}
           {tab === "webhooks" && <WebhookSettings />}
+          {tab === "integrations" && <IntegrationsTab />}
+          {tab === "danger" && <DangerZoneTab />}
         </div>
       </div>
     </div>
@@ -717,7 +727,7 @@ function TeamSettings() {
         <p className="text-xs text-muted-foreground">
           Team member management coming soon. Invite and manage roles for your organization.
         </p>
-        <button className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
+        <button disabled className="flex items-center gap-1.5 h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white opacity-50 cursor-not-allowed dark:bg-neutral-100 dark:text-neutral-900">
           Invite Member
         </button>
       </SettingsSection>
@@ -726,40 +736,70 @@ function TeamSettings() {
 }
 
 function NotificationSettings() {
-  const [prefs, setPrefs] = useState({
-    stage_changes: true,
-    new_proposals: true,
-    ai_completions: true,
-    weekly_digest: true,
-  });
+  const { data, isLoading } = useNotificationPreferences();
+  const updatePref = useUpdateNotificationPreference();
+  const prefs = (data as { data: { type: string; in_app: boolean; email: boolean }[] } | undefined)?.data ?? [];
+
+  const get = (key: string) => {
+    const p = prefs.find((pr) => pr.type === key);
+    return p ? { in_app: p.in_app, email: p.email } : { in_app: true, email: true };
+  };
+
+  const setPref = (key: string, field: "in_app" | "email", val: boolean) => {
+    updatePref.mutate({ type: key, [field]: val });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const rows = [
+    { key: "stage_changes", label: "Sponsor stage changes", desc: "Get notified when a sponsor moves stages" },
+    { key: "new_proposals", label: "New proposals", desc: "Notifications for incoming proposals" },
+    { key: "ai_completions", label: "AI agent completions", desc: "When AI agents finish tasks" },
+    { key: "weekly_digest", label: "Weekly digest", desc: "Summary of platform activity" },
+  ];
 
   return (
     <div className="space-y-6">
-      <SettingsSection title="Email Notifications">
-        <ToggleRow
-          label="Sponsor stage changes"
-          description="Get notified when a sponsor moves stages"
-          enabled={prefs.stage_changes}
-          onToggle={() => setPrefs({ ...prefs, stage_changes: !prefs.stage_changes })}
-        />
-        <ToggleRow
-          label="New proposals"
-          description="Notifications for incoming proposals"
-          enabled={prefs.new_proposals}
-          onToggle={() => setPrefs({ ...prefs, new_proposals: !prefs.new_proposals })}
-        />
-        <ToggleRow
-          label="AI agent completions"
-          description="When AI agents finish tasks"
-          enabled={prefs.ai_completions}
-          onToggle={() => setPrefs({ ...prefs, ai_completions: !prefs.ai_completions })}
-        />
-        <ToggleRow
-          label="Weekly digest"
-          description="Summary of platform activity"
-          enabled={prefs.weekly_digest}
-          onToggle={() => setPrefs({ ...prefs, weekly_digest: !prefs.weekly_digest })}
-        />
+      <SettingsSection title="Email & In-App Notifications">
+        {rows.map(({ key, label, desc }) => {
+          const current = get(key);
+          return (
+            <div key={key} className="py-2 border-b border-border/40 last:border-0">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium">{label}</p>
+                  <p className="text-[10px] text-muted-foreground">{desc}</p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-[10px] font-medium text-muted-foreground">In-App</span>
+                  <button
+                    type="button"
+                    onClick={() => setPref(key, "in_app", !current.in_app)}
+                    disabled={updatePref.isPending}
+                    className={`relative h-5 w-9 rounded-full transition-colors ${current.in_app ? "bg-neutral-900 dark:bg-neutral-100" : "bg-neutral-200 dark:bg-neutral-700"}`}
+                  >
+                    <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform dark:bg-neutral-900 ${current.in_app ? "translate-x-4" : "translate-x-0.5"}`} />
+                  </button>
+                  <span className="text-[10px] font-medium text-muted-foreground">Email</span>
+                  <button
+                    type="button"
+                    onClick={() => setPref(key, "email", !current.email)}
+                    disabled={updatePref.isPending}
+                    className={`relative h-5 w-9 rounded-full transition-colors ${current.email ? "bg-neutral-900 dark:bg-neutral-100" : "bg-neutral-200 dark:bg-neutral-700"}`}
+                  >
+                    <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform dark:bg-neutral-900 ${current.email ? "translate-x-4" : "translate-x-0.5"}`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </SettingsSection>
     </div>
   );
@@ -846,6 +886,39 @@ function ToggleRow({
           }`}
         />
       </button>
+    </div>
+  );
+}
+
+function IntegrationsTab() {
+  return (
+    <div className="space-y-6">
+      <SettingsSection title="Integrations">
+        <p className="text-xs text-muted-foreground">Connect external services to automate workflows.</p>
+        <a href="/integrations" className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:underline">Manage integrations <ArrowRight className="h-3 w-3" /></a>
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          {["Slack","HubSpot","Salesforce","Google Calendar","Zapier"].map((name) => (
+            <div key={name} className="flex items-center justify-between rounded-lg border border-border p-3">
+              <span className="text-xs font-medium">{name}</span>
+              <button className="text-[10px] font-medium text-amber-600 hover:underline">Connect</button>
+            </div>
+          ))}
+        </div>
+      </SettingsSection>
+    </div>
+  );
+}
+
+function DangerZoneTab() {
+  return (
+    <div className="space-y-6">
+      <SettingsSection title="Danger Zone">
+        <div className="rounded-xl border border-red-200/60 bg-red-50/30 dark:border-red-900/40 dark:bg-red-950/20 p-4">
+          <h4 className="text-sm font-semibold text-red-600 dark:text-red-400">Delete Account</h4>
+          <p className="text-xs text-muted-foreground mt-1">Permanently remove your account. This action is disabled and cannot be undone.</p>
+          <button disabled className="mt-3 h-9 rounded-lg bg-red-600 px-4 text-xs font-medium text-white opacity-40 cursor-not-allowed hover:bg-red-600">Delete Account</button>
+        </div>
+      </SettingsSection>
     </div>
   );
 }
