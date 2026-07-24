@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { api } from "@/lib/api";
+import { motion } from "motion/react";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -47,7 +48,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-8 shadow-sm">
+    <motion.div className="rounded-xl border border-border bg-card p-8 shadow-sm" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="mb-6 text-center">
         <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
           <span className="text-sm font-bold text-primary-foreground">S</span>
@@ -140,6 +141,6 @@ export default function RegisterPage() {
           Sign in
         </Link>
       </p>
-    </div>
+    </motion.div>
   );
 }
