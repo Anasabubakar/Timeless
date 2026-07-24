@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Search, Filter } from "lucide-react";
+import { motion } from "motion/react";
 import { useCampaigns, useCreateCampaign } from "@/queries/campaigns";
 import {
   Dialog,
@@ -20,7 +21,7 @@ export default function CampaignsPage() {
   const campaigns: Campaign[] = (data as any)?.campaigns || [];
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Campaigns</h1>
@@ -74,15 +75,18 @@ export default function CampaignsPage() {
         <div className="grid grid-cols-2 gap-4">
           {campaigns
             .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
-            .map((campaign) => {
+            .map((campaign, i) => {
               const progress = campaign.goal_amount
                 ? Math.round((campaign.raised_amount / campaign.goal_amount) * 100)
                 : 0;
 
               return (
-                <div
+                <motion.div
                   key={campaign.id}
                   className="rounded-xl border border-border bg-card p-5 transition-shadow hover:shadow-sm"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25, delay: i * 0.05 }}
                 >
                   <div className="flex items-start justify-between">
                     <div>
@@ -127,14 +131,14 @@ export default function CampaignsPage() {
                       Ends {new Date(campaign.end_date).toLocaleDateString()}
                     </p>
                   )}
-                </div>
+                </motion.div>
               );
             })}
         </div>
       )}
 
       <CreateCampaignDialog open={showCreate} onOpenChange={setShowCreate} />
-    </div>
+    </motion.div>
   );
 }
 
