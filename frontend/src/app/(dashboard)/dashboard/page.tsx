@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   Loader2,
 } from "lucide-react";
+import { motion } from "motion/react";
 import { cn, formatCurrency, formatNumber } from "@/lib/utils";
 import { useDashboardStats, usePipelineAnalytics, useRecentActivity } from "@/queries/analytics";
 
@@ -88,7 +89,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-sm text-muted-foreground">
@@ -98,10 +99,13 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
-        {kpis.map((stat) => (
-          <div
+        {kpis.map((stat, i) => (
+          <motion.div
             key={stat.name}
             className="rounded-xl border border-border bg-card p-5"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: i * 0.06 }}
           >
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">{stat.name}</span>
@@ -121,13 +125,18 @@ export default function DashboardPage() {
                 </span>
               )}
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
       <div className="grid grid-cols-3 gap-4">
         {/* Pipeline Overview */}
-        <div className="col-span-2 rounded-xl border border-border bg-card p-5">
+        <motion.div
+          className="col-span-2 rounded-xl border border-border bg-card p-5"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.25 }}
+        >
           <h2 className="text-sm font-medium">Pipeline Overview</h2>
           {pipelineLoading ? (
             <div className="mt-4 flex h-40 items-center justify-center">
@@ -139,8 +148,14 @@ export default function DashboardPage() {
             </p>
           ) : (
             <div className="mt-4 space-y-3">
-              {pipeline.map((stage) => (
-                <div key={stage.stage} className="flex items-center gap-3">
+              {pipeline.map((stage, i) => (
+                <motion.div
+                  key={stage.stage}
+                  className="flex items-center gap-3"
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.25, delay: 0.3 + i * 0.05 }}
+                >
                   <span className="w-24 text-sm text-muted-foreground">
                     {stageLabels[stage.stage] ?? stage.stage}
                   </span>
@@ -160,14 +175,19 @@ export default function DashboardPage() {
                   <span className="w-8 text-right text-sm font-medium">
                     {stage.count}
                   </span>
-                </div>
+                </motion.div>
               ))}
             </div>
           )}
-        </div>
+        </motion.div>
 
         {/* Recent Activity */}
-        <div className="rounded-xl border border-border bg-card p-5">
+        <motion.div
+          className="rounded-xl border border-border bg-card p-5"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
+        >
           <h2 className="text-sm font-medium">Recent Activity</h2>
           {activityLoading ? (
             <div className="mt-4 flex h-40 items-center justify-center">
@@ -179,8 +199,14 @@ export default function DashboardPage() {
             </p>
           ) : (
             <div className="mt-4 space-y-4">
-              {activities.slice(0, 8).map((item) => (
-                <div key={item.id} className="flex flex-col gap-0.5">
+              {activities.slice(0, 8).map((item, i) => (
+                <motion.div
+                  key={item.id}
+                  className="flex flex-col gap-0.5"
+                  initial={{ opacity: 0, x: 8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.2, delay: 0.35 + i * 0.04 }}
+                >
                   <span className="text-sm">{item.subject || item.type}</span>
                   {item.description && (
                     <span className="text-xs text-muted-foreground">
@@ -190,12 +216,12 @@ export default function DashboardPage() {
                   <span className="text-[11px] text-muted-foreground/60">
                     {formatRelativeTime(item.created_at)}
                   </span>
-                </div>
+                </motion.div>
               ))}
             </div>
           )}
-        </div>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 }
