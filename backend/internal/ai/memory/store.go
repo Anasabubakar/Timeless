@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/sponsoros/backend/internal/ai/provider"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type NodeType string
