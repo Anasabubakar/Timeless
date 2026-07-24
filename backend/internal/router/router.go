@@ -267,6 +267,13 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	searchHandler := handler.NewSearchHandler(db)
 	protected.Get("/search", searchHandler.Search)
 
+	// Import
+	importHandler := handler.NewImportHandler(db)
+	imports := protected.Group("/import")
+	imports.Post("/companies", importHandler.ImportCompanies)
+	imports.Post("/contacts", importHandler.ImportContacts)
+	imports.Post("/sponsors", importHandler.ImportSponsors)
+
 	// Batch Operations
 	batchHandler := handler.NewBatchHandler(db)
 	protected.Post("/sponsors/batch/update", batchHandler.BatchUpdate("sponsors"))
