@@ -12,6 +12,7 @@ import {
   useRemoveMember,
   type TeamMember,
 } from "@/queries/team";
+import { motion } from "motion/react";
 
 function InviteDialog({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState("");
@@ -107,7 +108,7 @@ export default function TeamSettingsPage() {
   const members: TeamMember[] = data?.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Team</h1>
@@ -188,6 +189,6 @@ export default function TeamSettingsPage() {
       )}
 
       {showInvite && <InviteDialog onClose={() => setShowInvite(false)} />}
-    </div>
+    </motion.div>
   );
 }
