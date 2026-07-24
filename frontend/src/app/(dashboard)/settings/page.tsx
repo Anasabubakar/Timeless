@@ -47,6 +47,7 @@ import {
 import { useTeamMembers, useInviteMember, useRemoveMember, useOrgRoles } from "@/queries/team";
 import { useNotificationPreferences, useUpdateNotificationPreference } from "@/queries/notifications";
 import { useImportCompanies, useImportContacts, useImportSponsors, type ImportResult } from "@/queries/import";
+import { Logo, LogoGallery } from "@/components/brand/logo";
 
 type Tab = "organization" | "profile" | "team" | "notifications" | "api" | "webhooks" | "import";
 
@@ -551,6 +552,17 @@ function OrgSettings() {
             className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:bg-neutral-900"
           />
         </FieldGroup>
+      </SettingsSection>
+
+      <SettingsSection title="Timeless brand">
+        <p className="text-xs text-muted-foreground">
+          Official logo variants used across the product (light/dark, solid plate and mark-only).
+        </p>
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
+          <Logo size={36} style="solid" showWordmark />
+          <Logo size={36} style="mark" />
+        </div>
+        <LogoGallery />
       </SettingsSection>
 
       <div className="flex items-center justify-end gap-2">

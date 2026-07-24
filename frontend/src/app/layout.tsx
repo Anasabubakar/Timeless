@@ -8,12 +8,13 @@ export const metadata: Metadata = {
   description: "AI-powered sponsorship intelligence and operations platform",
   icons: {
     icon: [
+      { url: "/images/logo-black.svg", type: "image/svg+xml", media: "(prefers-color-scheme: light)" },
+      { url: "/images/logo-white.svg", type: "image/svg+xml", media: "(prefers-color-scheme: dark)" },
+      { url: "/images/logo-black.svg", type: "image/svg+xml" },
       { url: "/favicon.ico", sizes: "32x32" },
-      { url: "/favicon.svg", type: "image/svg+xml" },
-      { url: "/icon.png", type: "image/png", sizes: "32x32" },
     ],
-    shortcut: "/favicon.ico",
-    apple: "/icon.png",
+    shortcut: "/images/logo-black.svg",
+    apple: "/images/logo-black.svg",
   },
 };
 

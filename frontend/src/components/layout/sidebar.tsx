@@ -19,6 +19,7 @@ import {
   Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/brand/logo";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -42,11 +43,8 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-[240px] border-r border-border bg-card">
-      <div className="flex h-14 items-center gap-2 border-b border-border px-5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
-          <span className="text-xs font-bold text-primary-foreground">S</span>
-        </div>
-        <span className="text-sm font-semibold tracking-tight">Timeless</span>
+      <div className="flex h-14 items-center border-b border-border px-5">
+        <Logo href="/dashboard" size={28} style="solid" showWordmark priority />
       </div>
 
       <nav className="flex flex-col gap-0.5 p-3">

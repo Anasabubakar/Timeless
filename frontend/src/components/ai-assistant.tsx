@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useAIQuery } from '@/queries/ai';
+import { Logo } from '@/components/brand/logo';
 
 interface Message {
   id: string;
@@ -67,23 +68,22 @@ export function AIAssistant() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-neutral-900 text-white shadow-lg transition-transform hover:scale-105"
+        className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-neutral-900 text-white shadow-lg transition-transform hover:scale-105 overflow-hidden"
+        aria-label="Open Timeless AI Assistant"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z" />
-          <path d="M10 21v1a2 2 0 0 0 4 0v-1" />
-        </svg>
+        <Logo size={28} style="mark" variant="white-nobg" className="opacity-95" />
       </button>
     );
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex h-[500px] w-[380px] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl">
+    <div className="fixed bottom-6 right-6 z-50 flex h-[500px] w-[380px] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-950">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3 dark:border-neutral-800">
         <div className="flex items-center gap-2">
+          <Logo size={22} style="solid" variant="black" />
+          <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Timeless AI</span>
           <div className="h-2 w-2 rounded-full bg-green-500" />
-          <span className="text-sm font-medium text-neutral-900">AI Assistant</span>
         </div>
         <button
           onClick={() => setOpen(false)}

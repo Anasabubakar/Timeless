@@ -37,9 +37,6 @@ export default function LoginPage() {
   return (
     <motion.div className="rounded-xl border border-border bg-card p-8 shadow-sm" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="mb-6 text-center">
-        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-          <span className="text-sm font-bold text-primary-foreground">S</span>
-        </div>
         <h1 className="text-xl font-semibold">Welcome back</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Sign in to your Timeless account
