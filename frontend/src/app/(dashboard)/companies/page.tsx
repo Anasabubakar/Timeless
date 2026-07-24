@@ -11,6 +11,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import type { Company } from "@/types";
+import { motion } from "motion/react";
 
 export default function CompaniesPage() {
   const [search, setSearch] = useState("");
@@ -20,7 +21,7 @@ export default function CompaniesPage() {
   const companies: Company[] = (data as any)?.companies || [];
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Companies</h1>
@@ -138,7 +139,7 @@ export default function CompaniesPage() {
       )}
 
       <CreateCompanyDialog open={showCreate} onOpenChange={setShowCreate} />
-    </div>
+    </motion.div>
   );
 }
 
