@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Plus, GripVertical, Search, Filter } from "lucide-react";
+import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { useSponsors, useCreateSponsor } from "@/queries/sponsors";
 import { useCompanies } from "@/queries/companies";
@@ -37,7 +38,7 @@ export default function SponsorsPage() {
   }, {});
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Pipeline</h1>
@@ -75,10 +76,13 @@ export default function SponsorsPage() {
         </div>
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-4">
-          {STAGES.map((stage) => (
-            <div
+          {STAGES.map((stage, i) => (
+            <motion.div
               key={stage.id}
               className="flex w-[280px] shrink-0 flex-col rounded-xl border border-border bg-muted/20"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: i * 0.05 }}
             >
               <div className={cn("border-t-2 rounded-t-xl px-3 py-2.5", stage.color)}>
                 <div className="flex items-center justify-between">
@@ -143,13 +147,13 @@ export default function SponsorsPage() {
                   Add
                 </button>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
 
       <CreateSponsorDialog open={showCreate} onOpenChange={setShowCreate} />
-    </div>
+    </motion.div>
   );
 }
 
