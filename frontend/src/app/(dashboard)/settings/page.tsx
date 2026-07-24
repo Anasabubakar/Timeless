@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, Fragment, useRef } from "react";
 import {
   Building2,
   User,
@@ -23,6 +23,8 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Upload,
+  FileUp,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
 import {
@@ -42,8 +44,11 @@ import {
   type Webhook as WebhookType,
   type WebhookDelivery,
 } from "@/queries/webhooks";
+import { useTeamMembers, useInviteMember, useRemoveMember, useOrgRoles } from "@/queries/team";
+import { useNotificationPreferences, useUpdateNotificationPreference } from "@/queries/notifications";
+import { useImportCompanies, useImportContacts, useImportSponsors, type ImportResult } from "@/queries/import";
 
-type Tab = "organization" | "profile" | "team" | "notifications" | "api" | "webhooks";
+type Tab = "organization" | "profile" | "team" | "notifications" | "api" | "webhooks" | "import";
 
 const WEBHOOK_EVENTS = [
   { value: "sponsor.created", label: "Sponsor Created" },
@@ -73,6 +78,7 @@ export default function SettingsPage() {
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "api", label: "API Keys", icon: Key },
     { id: "webhooks", label: "Webhooks", icon: Webhook },
+    { id: "import", label: "Import", icon: Upload },
   ];
 
   return (
@@ -109,6 +115,7 @@ export default function SettingsPage() {
           {tab === "notifications" && <NotificationSettings />}
           {tab === "api" && <ApiSettings />}
           {tab === "webhooks" && <WebhookSettings />}
+          {tab === "import" && <ImportSettings />}
         </div>
       </div>
     </div>
@@ -711,55 +718,313 @@ function ProfileSettings() {
 // ── Other Tabs ──────────────────────────────────────────────────────────────
 
 function TeamSettings() {
+  const { data: membersData, isLoading } = useTeamMembers();
+  const { data: rolesData } = useOrgRoles();
+  const inviteMember = useInviteMember();
+  const removeMember = useRemoveMember();
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteFirstName, setInviteFirstName] = useState("");
+  const [inviteLastName, setInviteLastName] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
+
+  const members = membersData?.data ?? [];
+  const roles = rolesData?.data ?? [];
+
+  const handleInvite = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail) return;
+    inviteMember.mutate(
+      { email: inviteEmail, first_name: inviteFirstName, last_name: inviteLastName, role: inviteRole },
+      {
+        onSuccess: () => {
+          setInviteEmail("");
+          setInviteFirstName("");
+          setInviteLastName("");
+          setInviteRole("member");
+          setShowInvite(false);
+        },
+      }
+    );
+  };
+
   return (
     <div className="space-y-6">
       <SettingsSection title="Team Members">
-        <p className="text-xs text-muted-foreground">
-          Team member management coming soon. Invite and manage roles for your organization.
-        </p>
-        <button className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
-          Invite Member
-        </button>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            {members.length} member{members.length !== 1 ? "s" : ""} in your organization
+          </p>
+          <button
+            onClick={() => setShowInvite(!showInvite)}
+            className="h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+          >
+            Invite Member
+          </button>
+        </div>
+
+        {showInvite && (
+          <form onSubmit={handleInvite} className="flex items-end gap-2 rounded-lg border border-neutral-200 p-3 dark:border-neutral-700">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300">First Name</label>
+              <input
+                type="text"
+                value={inviteFirstName}
+                onChange={(e) => setInviteFirstName(e.target.value)}
+                placeholder="First"
+                className="h-8 w-full rounded-md border border-neutral-200 bg-white px-3 text-xs dark:border-neutral-700 dark:bg-neutral-800"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300">Last Name</label>
+              <input
+                type="text"
+                value={inviteLastName}
+                onChange={(e) => setInviteLastName(e.target.value)}
+                placeholder="Last"
+                className="h-8 w-full rounded-md border border-neutral-200 bg-white px-3 text-xs dark:border-neutral-700 dark:bg-neutral-800"
+              />
+            </div>
+            <div className="flex-1 space-y-1">
+              <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300">Email</label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="colleague@company.com"
+                className="h-8 w-full rounded-md border border-neutral-200 bg-white px-3 text-xs dark:border-neutral-700 dark:bg-neutral-800"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300">Role</label>
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value)}
+                className="h-8 rounded-md border border-neutral-200 bg-white px-2 text-xs dark:border-neutral-700 dark:bg-neutral-800"
+              >
+                {(roles.length > 0 ? roles : [{ name: "admin" }, { name: "member" }, { name: "viewer" }]).map((r: { name: string }) => (
+                  <option key={r.name} value={r.name}>{r.name}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="submit"
+              disabled={inviteMember.isPending}
+              className="h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              {inviteMember.isPending ? "Sending..." : "Send Invite"}
+            </button>
+          </form>
+        )}
+
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" /> Loading members...
+          </div>
+        ) : (
+          <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
+            {members.map((member) => (
+              <div key={member.id} className="flex items-center justify-between py-3">
+                <div>
+                  <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                    {member.first_name ? `${member.first_name} ${member.last_name}` : member.email}
+                  </p>
+                  {member.first_name && (
+                    <p className="text-xs text-muted-foreground">{member.email}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+                    {member.roles?.[0] ?? "member"}
+                  </span>
+                  <button
+                    onClick={() => removeMember.mutate(member.id)}
+                    className="rounded p-1 text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                    title="Remove member"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </SettingsSection>
     </div>
   );
 }
 
 function NotificationSettings() {
-  const [prefs, setPrefs] = useState({
-    stage_changes: true,
-    new_proposals: true,
-    ai_completions: true,
-    weekly_digest: true,
-  });
+  const { data, isLoading } = useNotificationPreferences();
+  const updatePref = useUpdateNotificationPreference();
+
+  const prefs: Array<{ type: string; in_app: boolean; email: boolean }> = data?.data ?? [];
+
+  const LABELS: Record<string, { label: string; description: string }> = {
+    "pipeline.move": { label: "Sponsor stage changes", description: "When a sponsor moves pipeline stages" },
+    "agent.complete": { label: "AI agent completions", description: "When AI agents finish tasks" },
+    "outreach.reply": { label: "Outreach replies", description: "When a contact replies to outreach" },
+    "deal.won": { label: "Deal won", description: "When a deal is marked as won" },
+    "deal.lost": { label: "Deal lost", description: "When a deal is marked as lost" },
+    "task.assigned": { label: "Task assigned", description: "When a task is assigned to you" },
+    "team.invite": { label: "Team invites", description: "When someone invites you to a team" },
+    "mention": { label: "Mentions", description: "When you are mentioned" },
+    "webhook.failed": { label: "Webhook failures", description: "When a webhook delivery fails" },
+    "system.alert": { label: "System alerts", description: "Important system notifications" },
+  };
+
+  const toggle = (type: string, channel: "in_app" | "email", current: boolean) => {
+    updatePref.mutate({ type, [channel]: !current });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-8 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" /> Loading preferences...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <SettingsSection title="Email Notifications">
-        <ToggleRow
-          label="Sponsor stage changes"
-          description="Get notified when a sponsor moves stages"
-          enabled={prefs.stage_changes}
-          onToggle={() => setPrefs({ ...prefs, stage_changes: !prefs.stage_changes })}
-        />
-        <ToggleRow
-          label="New proposals"
-          description="Notifications for incoming proposals"
-          enabled={prefs.new_proposals}
-          onToggle={() => setPrefs({ ...prefs, new_proposals: !prefs.new_proposals })}
-        />
-        <ToggleRow
-          label="AI agent completions"
-          description="When AI agents finish tasks"
-          enabled={prefs.ai_completions}
-          onToggle={() => setPrefs({ ...prefs, ai_completions: !prefs.ai_completions })}
-        />
-        <ToggleRow
-          label="Weekly digest"
-          description="Summary of platform activity"
-          enabled={prefs.weekly_digest}
-          onToggle={() => setPrefs({ ...prefs, weekly_digest: !prefs.weekly_digest })}
-        />
+      <SettingsSection title="Notification Preferences">
+        <div className="mb-2 grid grid-cols-[1fr_auto_auto] gap-x-6 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <span>Event</span>
+          <span>In-app</span>
+          <span>Email</span>
+        </div>
+        <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
+          {Object.entries(LABELS).map(([type, { label, description }]) => {
+            const pref = prefs.find((p) => p.type === type);
+            const inApp = pref?.in_app ?? true;
+            const email = pref?.email ?? true;
+            return (
+              <div key={type} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-6 py-3">
+                <div>
+                  <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{label}</p>
+                  <p className="text-xs text-muted-foreground">{description}</p>
+                </div>
+                <button
+                  onClick={() => toggle(type, "in_app", inApp)}
+                  className={`relative h-5 w-9 rounded-full transition-colors ${inApp ? "bg-neutral-900 dark:bg-neutral-100" : "bg-neutral-200 dark:bg-neutral-700"}`}
+                >
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform dark:bg-neutral-900 ${inApp ? "translate-x-4" : "translate-x-0.5"}`} />
+                </button>
+                <button
+                  onClick={() => toggle(type, "email", email)}
+                  className={`relative h-5 w-9 rounded-full transition-colors ${email ? "bg-neutral-900 dark:bg-neutral-100" : "bg-neutral-200 dark:bg-neutral-700"}`}
+                >
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform dark:bg-neutral-900 ${email ? "translate-x-4" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </SettingsSection>
+    </div>
+  );
+}
+
+function ImportSettings() {
+  const importCompanies = useImportCompanies();
+  const importContacts = useImportContacts();
+  const importSponsors = useImportSponsors();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [entity, setEntity] = useState<"companies" | "contacts" | "sponsors">("companies");
+  const [result, setResult] = useState<ImportResult | null>(null);
+
+  const mutation = entity === "companies" ? importCompanies : entity === "contacts" ? importContacts : importSponsors;
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setResult(null);
+    mutation.mutate(file, {
+      onSuccess: (data) => setResult(data),
+    });
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  return (
+    <div className="space-y-6">
+      <SettingsSection title="Import Data">
+        <p className="text-xs text-muted-foreground">
+          Upload a CSV file to bulk-import records. The first row must be column headers.
+          Headers are normalized (lowercased, spaces become underscores).
+        </p>
+
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300">Entity type</label>
+            <select
+              value={entity}
+              onChange={(e) => { setEntity(e.target.value as typeof entity); setResult(null); }}
+              className="h-8 w-48 rounded-md border border-neutral-200 bg-white px-2 text-xs dark:border-neutral-700 dark:bg-neutral-800"
+            >
+              <option value="companies">Companies</option>
+              <option value="contacts">Contacts</option>
+              <option value="sponsors">Sponsors</option>
+            </select>
+          </div>
+
+          <div>
+            <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={mutation.isPending}
+              className="flex items-center gap-1.5 h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              {mutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileUp className="h-3.5 w-3.5" />}
+              {mutation.isPending ? "Importing..." : "Upload CSV"}
+            </button>
+          </div>
+        </div>
+
+        {result && (
+          <div className="mt-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-700">
+            <div className="flex items-center gap-4 text-xs">
+              <span className="flex items-center gap-1 text-green-600">
+                <CheckCircle2 className="h-3.5 w-3.5" /> {result.inserted} imported
+              </span>
+              {result.errors > 0 && (
+                <span className="flex items-center gap-1 text-red-600">
+                  <XCircle className="h-3.5 w-3.5" /> {result.errors} failed
+                </span>
+              )}
+            </div>
+            {result.row_errors && result.row_errors.length > 0 && (
+              <div className="mt-3 max-h-40 overflow-y-auto space-y-1">
+                {result.row_errors.map((re, i) => (
+                  <p key={i} className="text-[11px] text-red-600">
+                    Row {re.row}: {re.error}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {mutation.isError && (
+          <p className="text-xs text-red-600">Upload failed: {(mutation.error as Error).message}</p>
+        )}
+      </SettingsSection>
+
+      <SettingsSection title="CSV Column Reference">
+        <div className="space-y-3 text-xs text-muted-foreground">
+          <div>
+            <p className="font-medium text-neutral-700 dark:text-neutral-300">Companies</p>
+            <p>name (required), domain, website, description, employee_count, annual_revenue, headquarters, phone, linkedin_url, twitter_url, source, status, founded_year</p>
+          </div>
+          <div>
+            <p className="font-medium text-neutral-700 dark:text-neutral-300">Contacts</p>
+            <p>first_name or name (required), last_name, email, phone, title, department, linkedin_url, notes, status, company_id or company_name</p>
+          </div>
+          <div>
+            <p className="font-medium text-neutral-700 dark:text-neutral-300">Sponsors</p>
+            <p>campaign_id (required), company_id or company_name (required), stage, tier, notes, deal_value, probability</p>
+          </div>
+        </div>
       </SettingsSection>
     </div>
   );
