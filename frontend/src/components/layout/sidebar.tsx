@@ -16,6 +16,7 @@ import {
   Activity,
   FileText,
   Link2,
+  FileUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +32,7 @@ const navigation = [
   { name: "AI Agents", href: "/ai-agents", icon: Bot },
   { name: "Automations", href: "/automations", icon: Zap },
   { name: "Integrations", href: "/integrations", icon: Link2 },
+  { name: "Import", href: "/import", icon: FileUp },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

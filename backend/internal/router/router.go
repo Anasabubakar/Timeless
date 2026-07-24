@@ -276,6 +276,14 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	protected.Post("/contacts/batch/update", batchHandler.BatchUpdate("contacts"))
 	protected.Post("/contacts/batch/delete", batchHandler.BatchDelete("contacts"))
 
+
+	// Import wizard
+	importHandler := handler.NewImportHandler(db)
+	importRoutes := protected.Group("/import")
+	importRoutes.Post("/sponsors", importHandler.ImportSponsors)
+	importRoutes.Post("/contacts", importHandler.ImportContacts)
+	importRoutes.Post("/companies", importHandler.ImportCompanies)
+
 	// Team Management
 	teamHandler := handler.NewTeamHandler(db)
 	team := protected.Group("/team")
