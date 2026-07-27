@@ -2,67 +2,40 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Building2,
-  Target,
-  Users,
-  Mail,
-  BarChart3,
-  Settings,
-  Bot,
-  Zap,
-  FolderKanban,
-  Activity,
-  FileText,
-  Link2,
-  Upload,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
+import { NAVIGATION } from "@/lib/navigation";
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Campaigns", href: "/campaigns", icon: Target },
-  { name: "Sponsors", href: "/sponsors", icon: FolderKanban },
-  { name: "Proposals", href: "/proposals", icon: FileText },
-  { name: "Companies", href: "/companies", icon: Building2 },
-  { name: "Contacts", href: "/contacts", icon: Users },
-  { name: "Activity", href: "/activities", icon: Activity },
-  { name: "Outreach", href: "/outreach", icon: Mail },
-  { name: "AI Agents", href: "/ai-agents", icon: Bot },
-  { name: "Automations", href: "/automations", icon: Zap },
-  { name: "Integrations", href: "/integrations", icon: Link2 },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
-  { name: "Import", href: "/import", icon: Upload },
-  { name: "Settings", href: "/settings", icon: Settings },
-];
-
+// Hidden below md (phones get the bottom dock instead). Collapses to an
+// icon-only rail on tablets (md–lg) so it never feels like a stretched
+// phone layout, then expands to the full labeled sidebar at lg+.
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-[240px] border-r border-border bg-card">
-      <div className="flex h-14 items-center border-b border-border px-5">
-        <Logo href="/dashboard" size={28} style="solid" showWordmark priority />
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-16 border-r border-border bg-card md:flex md:flex-col lg:w-[240px]">
+      <div className="flex h-14 items-center justify-center border-b border-border px-2 lg:justify-start lg:px-5">
+        <Logo href="/dashboard" size={28} style="solid" showWordmark={false} priority />
+        <span className="ml-2.5 hidden text-sm font-semibold lg:inline">Timeless</span>
       </div>
 
-      <nav className="flex flex-col gap-0.5 p-3">
-        {navigation.map((item) => {
+      <nav className="flex flex-col gap-0.5 p-2 lg:p-3">
+        {NAVIGATION.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.name}
               href={item.href}
+              title={item.name}
               className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
+                "flex items-center justify-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors lg:justify-start lg:py-2",
                 isActive
                   ? "bg-accent text-accent-foreground font-medium"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
               )}
             >
               <item.icon className="h-4 w-4 shrink-0" />
-              {item.name}
+              <span className="hidden lg:inline">{item.name}</span>
             </Link>
           );
         })}
