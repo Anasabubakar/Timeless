@@ -5,21 +5,24 @@ import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import { Building2, Users, Target, FolderKanban } from "lucide-react";
 import { useSearch, type SearchResult } from "@/queries/search";
+import { NAVIGATION } from "@/lib/navigation";
 
-const commands = [
-  { id: "dashboard", label: "Go to Dashboard", group: "Navigation", action: "/dashboard" },
-  { id: "campaigns", label: "Go to Campaigns", group: "Navigation", action: "/campaigns" },
-  { id: "sponsors", label: "Go to Pipeline", group: "Navigation", action: "/sponsors" },
-  { id: "companies", label: "Go to Companies", group: "Navigation", action: "/companies" },
-  { id: "contacts", label: "Go to Contacts", group: "Navigation", action: "/contacts" },
-  { id: "outreach", label: "Go to Outreach", group: "Navigation", action: "/outreach" },
-  { id: "ai-agents", label: "Go to AI Agents", group: "Navigation", action: "/ai-agents" },
-  { id: "analytics", label: "Go to Analytics", group: "Navigation", action: "/analytics" },
-  { id: "settings", label: "Go to Settings", group: "Navigation", action: "/settings" },
-  { id: "new-campaign", label: "Create Campaign", group: "Actions", action: "/campaigns?new=1" },
-  { id: "new-sponsor", label: "Add Sponsor", group: "Actions", action: "/sponsors?new=1" },
-  { id: "new-company", label: "Add Company", group: "Actions", action: "/companies?new=1" },
+// Reuses the same nav list as the sidebar and mobile nav dialog so "go to X"
+// commands never drift out of sync with the real routes.
+const navigationCommands = NAVIGATION.map((item) => ({
+  id: item.href,
+  label: `Go to ${item.name}`,
+  group: "Navigation" as const,
+  action: item.href,
+}));
+
+const actionCommands = [
+  { id: "new-campaign", label: "Create Campaign", group: "Actions" as const, action: "/campaigns?new=1" },
+  { id: "new-sponsor", label: "Add Sponsor", group: "Actions" as const, action: "/sponsors?new=1" },
+  { id: "new-company", label: "Add Company", group: "Actions" as const, action: "/companies?new=1" },
 ];
+
+const commands = [...navigationCommands, ...actionCommands];
 
 const TYPE_ICONS: Record<string, typeof Building2> = {
   sponsor: FolderKanban,
@@ -69,20 +72,20 @@ export function CommandPalette() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-[55]">
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={() => setOpen(false)}
       />
-      <div className="fixed left-1/2 top-[20%] w-full max-w-lg -translate-x-1/2">
+      <div className="fixed left-1/2 top-[10%] w-full max-w-lg -translate-x-1/2 px-4 sm:top-[20%] sm:px-0">
         <Command className="overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
           <Command.Input
             placeholder="Type a command or search..."
             value={query}
             onValueChange={setQuery}
-            className="h-11 w-full border-b border-border bg-transparent px-4 text-sm outline-none placeholder:text-muted-foreground"
+            className="h-12 w-full border-b border-border bg-transparent px-4 text-base outline-none placeholder:text-muted-foreground sm:h-11 sm:text-sm"
           />
-          <Command.List className="max-h-[300px] overflow-y-auto p-2">
+          <Command.List className="max-h-[min(60vh,300px)] overflow-y-auto p-2">
             <Command.Empty className="py-6 text-center text-sm text-muted-foreground">
               No results found.
             </Command.Empty>
