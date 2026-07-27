@@ -92,7 +92,7 @@ export function useUpdateNotificationPreference() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: { type: string; in_app?: boolean; email?: boolean }) =>
-      api.patch("/notifications/preferences", data),
+      api.put("/notifications/preferences", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications", "preferences"] });
     },
