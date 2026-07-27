@@ -38,7 +38,7 @@ func (a *CompanyIntelAgent) Execute(ctx context.Context, input *Input) (*Output,
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   2048,
 		Temperature: 0.5,
@@ -83,7 +83,7 @@ func (a *DecisionMakerAgent) Execute(ctx context.Context, input *Input) (*Output
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   1536,
 		Temperature: 0.4,
@@ -127,7 +127,7 @@ func (a *DuplicateAgent) Execute(ctx context.Context, input *Input) (*Output, er
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o-mini",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   1024,
 		Temperature: 0.2,
@@ -172,7 +172,7 @@ func (a *CRMAgent) Execute(ctx context.Context, input *Input) (*Output, error) {
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   1024,
 		Temperature: 0.4,
