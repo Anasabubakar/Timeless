@@ -57,6 +57,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Automation{},
 		&models.Notification{},
 		&models.NotificationPreference{},
+		&models.OnboardingState{},
 	}
 
 	if err := db.AutoMigrate(coreModels...); err != nil {
