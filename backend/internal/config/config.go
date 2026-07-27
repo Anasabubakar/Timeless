@@ -15,18 +15,32 @@ type Config struct {
 	DatabaseURL string `env:"DATABASE_URL,required"`
 	RedisURL    string `env:"REDIS_URL" envDefault:"redis://localhost:6379"`
 
-	JWTSecret      string        `env:"JWT_SECRET,required"`
-	JWTExpiry      time.Duration `env:"JWT_EXPIRY" envDefault:"24h"`
-	RefreshExpiry  time.Duration `env:"REFRESH_EXPIRY" envDefault:"720h"`
+	JWTSecret     string        `env:"JWT_SECRET,required"`
+	JWTExpiry     time.Duration `env:"JWT_EXPIRY" envDefault:"24h"`
+	RefreshExpiry time.Duration `env:"REFRESH_EXPIRY" envDefault:"720h"`
 
 	GoogleClientID     string `env:"GOOGLE_CLIENT_ID"`
 	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET"`
 	GoogleRedirectURL  string `env:"GOOGLE_REDIRECT_URL"`
 
+	// Public URL of this API, used to build OAuth redirect URIs.
+	APIPublicURL string `env:"API_PUBLIC_URL" envDefault:"http://localhost:8080"`
+
+	NotionClientID     string `env:"NOTION_CLIENT_ID"`
+	NotionClientSecret string `env:"NOTION_CLIENT_SECRET"`
+	ApolloClientID     string `env:"APOLLO_CLIENT_ID"`
+	ApolloClientSecret string `env:"APOLLO_CLIENT_SECRET"`
+	ZapierClientID     string `env:"ZAPIER_CLIENT_ID"`
+	ZapierClientSecret string `env:"ZAPIER_CLIENT_SECRET"`
+	ZapierAuthorizeURL string `env:"ZAPIER_AUTHORIZE_URL" envDefault:"https://mcp.zapier.com/oauth/authorize"`
+	ZapierTokenURL     string `env:"ZAPIER_TOKEN_URL" envDefault:"https://mcp.zapier.com/oauth/token"`
+
 	OpenAIKey     string `env:"OPENAI_API_KEY"`
 	AnthropicKey  string `env:"ANTHROPIC_API_KEY"`
 	GeminiKey     string `env:"GEMINI_API_KEY"`
 	GroqKey       string `env:"GROQ_API_KEY"`
+	NvidiaKey     string `env:"NVIDIA_API_KEY"`
+	NvidiaBaseURL string `env:"NVIDIA_BASE_URL" envDefault:"https://integrate.api.nvidia.com/v1"`
 	OpenRouterKey string `env:"OPENROUTER_API_KEY"`
 
 	SMTPHost     string `env:"SMTP_HOST"`
