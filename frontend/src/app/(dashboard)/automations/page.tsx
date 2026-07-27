@@ -5,8 +5,16 @@ import { Plus, Zap, Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useAutomations, useToggleAutomation, type Automation } from "@/queries/automations";
+import { useAutomations, useToggleAutomation, useCreateAutomation, type Automation } from "@/queries/automations";
 import { motion } from "motion/react";
+import { useNewParam } from "@/hooks/use-new-param";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 function formatLastRun(dateStr?: string): string {
   if (!dateStr) return "Never";
@@ -20,6 +28,8 @@ function formatLastRun(dateStr?: string): string {
 }
 
 export default function AutomationsPage() {
+  const [showCreate, setShowCreate] = useState(false);
+  useNewParam(() => setShowCreate(true));
   const { data, isLoading } = useAutomations();
   const toggle = useToggleAutomation();
 
@@ -27,14 +37,14 @@ export default function AutomationsPage() {
 
   return (
     <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Automations</h1>
           <p className="text-sm text-muted-foreground">
             Automated workflows powered by triggers and AI agents
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setShowCreate(true)}>
           <Plus className="h-4 w-4 mr-2" />
           New Automation
         </Button>
@@ -44,8 +54,8 @@ export default function AutomationsPage() {
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="animate-pulse rounded-xl border border-border bg-card px-5 py-4">
-              <div className="h-4 bg-neutral-200 rounded w-1/3 mb-2" />
-              <div className="h-3 bg-neutral-100 rounded w-2/3" />
+              <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-1/3 mb-2" />
+              <div className="h-3 bg-neutral-100 dark:bg-neutral-800 rounded w-2/3" />
             </div>
           ))}
         </div>
@@ -112,6 +122,83 @@ export default function AutomationsPage() {
           ))}
         </div>
       )}
+
+      <CreateAutomationDialog open={showCreate} onOpenChange={setShowCreate} />
     </motion.div>
+  );
+}
+
+const TRIGGER_TYPES = [
+  { id: "schedule", label: "Scheduled" },
+  { id: "webhook", label: "Webhook" },
+  { id: "event", label: "Event-based" },
+  { id: "manual", label: "Manual" },
+];
+
+function CreateAutomationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const createAutomation = useCreateAutomation();
+  const [form, setForm] = useState({ name: "", description: "", trigger_type: "schedule" });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createAutomation.mutate(
+      { name: form.name, description: form.description || undefined, trigger_type: form.trigger_type, is_active: false },
+      {
+        onSuccess: () => {
+          onOpenChange(false);
+          setForm({ name: "", description: "", trigger_type: "schedule" });
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New Automation</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+          <input
+            placeholder="Automation name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className="h-9 w-full rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700"
+            required
+          />
+          <textarea
+            placeholder="Description (optional)"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            className="min-h-[80px] w-full rounded-[10px] border border-neutral-200 bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700"
+          />
+          <select
+            value={form.trigger_type}
+            onChange={(e) => setForm({ ...form, trigger_type: e.target.value })}
+            className="h-9 w-full rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700"
+          >
+            {TRIGGER_TYPES.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createAutomation.isPending}
+              className="h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              {createAutomation.isPending ? "Creating..." : "Create"}
+            </button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
