@@ -112,7 +112,7 @@ const agents = [
 export default function AIAgentsPage() {
   return (
     <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">AI Agents</h1>
           <p className="text-sm text-muted-foreground">
@@ -129,7 +129,7 @@ export default function AIAgentsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {agents.map((agent) => (
           <div
             key={agent.id}
