@@ -24,7 +24,7 @@ func NewGemini(apiKey string) *Gemini {
 func (g *Gemini) Name() string { return "gemini" }
 
 func (g *Gemini) Models() []string {
-	return []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"}
+	return []string{"gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"}
 }
 
 type geminiContent struct {
@@ -63,7 +63,7 @@ type geminiResponse struct {
 func (g *Gemini) Complete(ctx context.Context, req *CompletionRequest) (*CompletionResponse, error) {
 	model := req.Model
 	if model == "" {
-		model = "gemini-2.5-flash"
+		model = "gemini-2.5-flash-lite"
 	}
 
 	var systemText string
