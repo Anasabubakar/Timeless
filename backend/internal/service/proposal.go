@@ -78,7 +78,6 @@ func (s *ProposalService) Generate(ctx context.Context, orgID uuid.UUID, userID 
 	prompt := buildProposalPrompt(company, sponsor, input)
 
 	resp, err := s.aiProvider.Complete(ctx, &provider.CompletionRequest{
-		Model: "gpt-4o",
 		Messages: []provider.Message{
 			{Role: provider.RoleSystem, Content: proposalSystemPrompt},
 			{Role: provider.RoleUser, Content: prompt},
