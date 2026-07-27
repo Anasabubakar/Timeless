@@ -14,6 +14,7 @@ import (
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/realtime"
 	"github.com/timeless/backend/internal/repository"
+	"github.com/timeless/backend/internal/security"
 	"github.com/timeless/backend/internal/service"
 	"github.com/timeless/backend/internal/storage"
 	"github.com/timeless/backend/internal/worker"
@@ -63,6 +64,14 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	profileHandler := handler.NewProfileHandler(userRepo)
 	protected.Patch("/profile", profileHandler.Update)
 	protected.Post("/profile/password", profileHandler.ChangePassword)
+
+	// Onboarding
+	onboardingRepo := repository.NewOnboardingRepository(db)
+	onboardingSvc := service.NewOnboardingService(onboardingRepo, userRepo)
+	onboardingHandler := handler.NewOnboardingHandler(onboardingSvc)
+	protected.Get("/onboarding/state", onboardingHandler.GetState)
+	protected.Patch("/onboarding/state", onboardingHandler.SaveState)
+	protected.Post("/onboarding/complete", onboardingHandler.Complete)
 
 	// Companies
 	companyRepo := repository.NewCompanyRepository(db)
@@ -129,13 +138,39 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	sequences.Delete("/:id", outreachHandler.DeleteSequence)
 	sequences.Post("/:id/enroll", outreachHandler.Enroll)
 
-	// AI Provider Registry (needed by proposals + AI endpoints)
+	// AI Provider Registry (needed by proposals + AI endpoints).
+	// Default chain, in priority order: Gemini -> Groq -> Nvidia -> OpenRouter.
+	// Each hop is only included if its key is configured; if a hop errors at
+	// request time (rate limit, outage, etc.) the chain automatically falls
+	// through to the next one instead of failing the whole request.
 	registry := provider.NewRegistry()
+	var defaultChain []provider.Provider
+	if cfg.GeminiKey != "" {
+		p := provider.NewGemini(cfg.GeminiKey)
+		registry.Register(p)
+		defaultChain = append(defaultChain, p)
+	}
+	if cfg.GroqKey != "" {
+		p := provider.NewGroq(cfg.GroqKey)
+		registry.Register(p)
+		defaultChain = append(defaultChain, p)
+	}
+	if cfg.NvidiaKey != "" {
+		p := provider.NewNvidia(cfg.NvidiaKey, cfg.NvidiaBaseURL)
+		registry.Register(p)
+		defaultChain = append(defaultChain, p)
+	}
 	if cfg.OpenRouterKey != "" {
-		registry.Register(provider.NewOpenRouter(cfg.OpenRouterKey))
+		p := provider.NewOpenRouter(cfg.OpenRouterKey)
+		registry.Register(p)
+		defaultChain = append(defaultChain, p)
 	}
 	if cfg.OpenAIKey != "" {
 		registry.Register(provider.NewOpenAI(cfg.OpenAIKey))
+	}
+	if len(defaultChain) > 0 {
+		registry.Register(provider.NewFallbackChain(defaultChain...))
+		registry.SetDefault("auto")
 	}
 
 	// Proposals
@@ -158,7 +193,8 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// Integrations
 	integrationRepo := repository.NewIntegrationRepository(db)
-	integrationSvc := service.NewIntegrationService(integrationRepo)
+	credentialCipher := security.NewCredentialCipher(cfg.JWTSecret)
+	integrationSvc := service.NewIntegrationService(integrationRepo, credentialCipher, workerClient)
 	integrationHandler := handler.NewIntegrationHandler(integrationSvc)
 	integrations := protected.Group("/integrations")
 	integrations.Get("/", integrationHandler.List)
@@ -166,6 +202,12 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	integrations.Get("/:id", integrationHandler.Get)
 	integrations.Patch("/:id", integrationHandler.Update)
 	integrations.Delete("/:id", integrationHandler.Delete)
+	integrations.Post("/:provider/connect", integrationHandler.Connect)
+
+	// OAuth (public: browser redirects can't carry auth headers)
+	oauthHandler := handler.NewOAuthHandler(cfg, rdb, integrationSvc)
+	api.Get("/integrations/oauth/callback", oauthHandler.Callback)
+	api.Get("/integrations/:provider/oauth/start", oauthHandler.Start)
 
 	// Automations
 	automationRepo := repository.NewAutomationRepository(db)
@@ -232,6 +274,18 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	ai.Post("/feedback", learningHandler.SubmitFeedback)
 	ai.Post("/preferences", learningHandler.StorePreference)
 	ai.Get("/preferences", learningHandler.GetPreferences)
+
+	// Onboarding: AI workspace discovery, goal recommendation, automation planning
+	projectRepo := repository.NewProjectRepository(db)
+	discoverySvc := service.NewDiscoveryService(integrationRepo, projectRepo, orchestrator)
+	goalSvc := service.NewGoalService(orchestrator)
+	automationPlanSvc := service.NewAutomationPlanService(orchestrator, automationRepo)
+	discoveryHandler := handler.NewDiscoveryHandler(discoverySvc, goalSvc, automationPlanSvc)
+	protected.Post("/onboarding/discovery/run", discoveryHandler.RunDiscovery)
+	protected.Post("/onboarding/discovery/select", discoveryHandler.SelectProjects)
+	protected.Post("/onboarding/goals/recommend", discoveryHandler.RecommendGoals)
+	protected.Post("/onboarding/goals/plan", discoveryHandler.PlanAutomation)
+	protected.Post("/onboarding/goals/approve", discoveryHandler.ApproveAutomation)
 
 	// Knowledge Graph & Semantic Search
 	var embedder provider.Embedder
