@@ -20,6 +20,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/security"
 )
 
 const (
@@ -32,6 +33,7 @@ const (
 	TaskWebhookDeliver   = "webhook:deliver"
 	TaskAnalyticsCompute = "analytics:compute"
 	TaskMemoryIndex      = "memory:index"
+	TaskIntegrationSync  = "integration:sync"
 )
 
 type TaskPayload struct {
@@ -52,12 +54,17 @@ func NewTask(taskType string, payload TaskPayload) (*asynq.Task, error) {
 }
 
 type Handlers struct {
-	logger *slog.Logger
-	db     *gorm.DB
+	logger          *slog.Logger
+	db              *gorm.DB
+	integrationSync *integrationSyncRunner
 }
 
-func NewHandlers(logger *slog.Logger, db *gorm.DB) *Handlers {
-	return &Handlers{logger: logger, db: db}
+func NewHandlers(logger *slog.Logger, db *gorm.DB, cipher *security.CredentialCipher) *Handlers {
+	return &Handlers{
+		logger:          logger,
+		db:              db,
+		integrationSync: newIntegrationSyncRunner(db, cipher),
+	}
 }
 
 func (h *Handlers) parsePayload(t *asynq.Task) (TaskPayload, error) {
@@ -322,16 +329,16 @@ func domainToTwitterHandle(domain string) string {
 
 func classifyIndustry(companyName string, tags []string) string {
 	keywords := map[string][]string{
-		"Technology":     {"tech", "software", "ai", "saas", "cloud", "data", "digital", "cyber", "app"},
-		"Finance":        {"bank", "finance", "invest", "capital", "fund", "fintech", "insurance"},
-		"Healthcare":     {"health", "medical", "pharma", "bio", "clinic", "care"},
-		"E-commerce":     {"shop", "store", "commerce", "retail", "market"},
-		"Education":      {"edu", "learn", "academy", "school", "university", "course"},
-		"Media":          {"media", "news", "publish", "content", "creative", "design"},
-		"Real Estate":    {"realty", "property", "estate", "home", "housing"},
+		"Technology":      {"tech", "software", "ai", "saas", "cloud", "data", "digital", "cyber", "app"},
+		"Finance":         {"bank", "finance", "invest", "capital", "fund", "fintech", "insurance"},
+		"Healthcare":      {"health", "medical", "pharma", "bio", "clinic", "care"},
+		"E-commerce":      {"shop", "store", "commerce", "retail", "market"},
+		"Education":       {"edu", "learn", "academy", "school", "university", "course"},
+		"Media":           {"media", "news", "publish", "content", "creative", "design"},
+		"Real Estate":     {"realty", "property", "estate", "home", "housing"},
 		"Food & Beverage": {"food", "restaurant", "beverage", "coffee", "drink"},
-		"Travel":         {"travel", "hotel", "tour", "flight", "booking"},
-		"Automotive":     {"auto", "car", "motor", "vehicle", "drive"},
+		"Travel":          {"travel", "hotel", "tour", "flight", "booking"},
+		"Automotive":      {"auto", "car", "motor", "vehicle", "drive"},
 	}
 
 	name := strings.ToLower(companyName)
@@ -818,4 +825,5 @@ func RegisterHandlers(mux *asynq.ServeMux, h *Handlers) {
 	mux.HandleFunc(TaskWebhookDeliver, h.HandleWebhookDeliver)
 	mux.HandleFunc(TaskAnalyticsCompute, h.HandleAnalyticsCompute)
 	mux.HandleFunc(TaskMemoryIndex, h.HandleMemoryIndex)
+	mux.HandleFunc(TaskIntegrationSync, h.HandleIntegrationSync)
 }
