@@ -30,8 +30,13 @@ func (o *OpenAI) Models() []string {
 }
 
 func (o *OpenAI) Complete(ctx context.Context, req *CompletionRequest) (*CompletionResponse, error) {
+	model := req.Model
+	if model == "" {
+		model = "gpt-4o-mini"
+	}
+
 	body := map[string]interface{}{
-		"model":    req.Model,
+		"model":    model,
 		"messages": req.Messages,
 	}
 	if req.Temperature > 0 {
