@@ -11,6 +11,8 @@ export interface User {
   last_login_at?: string;
   roles?: Role[];
   created_at: string;
+  onboarding_completed: boolean;
+  onboarding_completed_at?: string;
 }
 
 export interface Role {
