@@ -12,17 +12,19 @@ import {
 } from "@/components/ui/dialog";
 import type { Company } from "@/types";
 import { motion } from "motion/react";
+import { useNewParam } from "@/hooks/use-new-param";
 
 export default function CompaniesPage() {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  useNewParam(() => setShowCreate(true));
   const { data, isLoading } = useCompanies(1, 50, search);
 
   const companies: Company[] = (data as any)?.companies || [];
 
   return (
     <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Companies</h1>
           <p className="text-sm text-muted-foreground">
@@ -68,74 +70,120 @@ export default function CompaniesPage() {
           </button>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Company</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Industry</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Employees</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Score</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Status</th>
-                <th className="w-10 px-4 py-2.5"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {companies.map((company) => (
-                <tr key={company.id} className="transition-colors hover:bg-muted/20">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-xs font-medium">
-                        {company.name[0]}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{company.name}</p>
-                        <p className="text-xs text-muted-foreground">{company.domain || company.website}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {company.industry?.name || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {company.employee_count || "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {company.score ? (
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-emerald-500"
-                            style={{ width: `${company.score}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-medium">{company.score}</span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        company.status === "active"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-neutral-100 text-neutral-600"
-                      }`}
-                    >
-                      {company.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </button>
-                  </td>
+        <>
+          {/* Desktop/tablet: data table. Employees/Score condense away below lg. */}
+          <div className="hidden overflow-hidden rounded-xl border border-border sm:block">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Company</th>
+                  <th className="hidden px-4 py-2.5 text-left text-xs font-medium text-muted-foreground lg:table-cell">Industry</th>
+                  <th className="hidden px-4 py-2.5 text-left text-xs font-medium text-muted-foreground lg:table-cell">Employees</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Score</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Status</th>
+                  <th className="w-10 px-4 py-2.5"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {companies.map((company) => (
+                  <tr key={company.id} className="transition-colors hover:bg-muted/20">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-medium">
+                          {company.name[0]}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{company.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">{company.domain || company.website}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="hidden px-4 py-3 text-sm text-muted-foreground lg:table-cell">
+                      {company.industry?.name || "—"}
+                    </td>
+                    <td className="hidden px-4 py-3 text-sm text-muted-foreground lg:table-cell">
+                      {company.employee_count || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {company.score ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-emerald-500"
+                              style={{ width: `${company.score}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-medium">{company.score}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          company.status === "active"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-neutral-100 text-neutral-600"
+                        }`}
+                      >
+                        {company.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Phone: stacked cards instead of a cramped table */}
+          <div className="flex flex-col gap-2 sm:hidden">
+            {companies.map((company) => (
+              <div key={company.id} className="rounded-xl border border-border bg-card p-3.5 active:bg-muted/20">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-medium">
+                      {company.name[0]}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{company.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{company.domain || company.website}</p>
+                    </div>
+                  </div>
+                  <button className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                  {company.industry?.name && <span>{company.industry.name}</span>}
+                  {company.employee_count && <span>{company.employee_count} employees</span>}
+                  {typeof company.score === "number" && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-10 overflow-hidden rounded-full bg-muted">
+                        <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${company.score}%` }} />
+                      </span>
+                      {company.score}
+                    </span>
+                  )}
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      company.status === "active"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-neutral-100 text-neutral-600"
+                    }`}
+                  >
+                    {company.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       <CreateCompanyDialog open={showCreate} onOpenChange={setShowCreate} />
@@ -185,55 +233,55 @@ function CreateCompanyDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             placeholder="Company name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+            className="h-9 w-full rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
             required
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
               placeholder="Domain (e.g. stripe.com)"
               value={form.domain}
               onChange={(e) => setForm({ ...form, domain: e.target.value })}
-              className="h-9 rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+              className="h-9 rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
             />
             <input
               placeholder="Website URL"
               value={form.website}
               onChange={(e) => setForm({ ...form, website: e.target.value })}
-              className="h-9 rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+              className="h-9 rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
             />
           </div>
           <textarea
             placeholder="Description"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            className="min-h-[60px] w-full rounded-[10px] border border-neutral-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+            className="min-h-[60px] w-full rounded-[10px] border border-neutral-200 bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
               placeholder="Employee count"
               value={form.employee_count}
               onChange={(e) => setForm({ ...form, employee_count: e.target.value })}
-              className="h-9 rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+              className="h-9 rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
             />
             <input
               placeholder="Headquarters"
               value={form.headquarters}
               onChange={(e) => setForm({ ...form, headquarters: e.target.value })}
-              className="h-9 rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+              className="h-9 rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
             />
           </div>
           <DialogFooter>
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50"
+              className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={createCompany.isPending}
-              className="h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+              className="h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
               {createCompany.isPending ? "Adding..." : "Add Company"}
             </button>
