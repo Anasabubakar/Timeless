@@ -6,7 +6,6 @@ import {
   User,
   Shield,
   Bell,
-  Key,
   Loader2,
   Check,
   Webhook,
@@ -47,9 +46,7 @@ import {
 import { useTeamMembers, useInviteMember, useRemoveMember, useOrgRoles } from "@/queries/team";
 import { useNotificationPreferences, useUpdateNotificationPreference } from "@/queries/notifications";
 import { useImportCompanies, useImportContacts, useImportSponsors, type ImportResult } from "@/queries/import";
-import { Logo, LogoGallery } from "@/components/brand/logo";
-
-type Tab = "organization" | "profile" | "team" | "notifications" | "api" | "webhooks" | "import";
+type Tab = "organization" | "profile" | "team" | "notifications" | "webhooks" | "import";
 
 const WEBHOOK_EVENTS = [
   { value: "sponsor.created", label: "Sponsor Created" },
@@ -77,7 +74,6 @@ export default function SettingsPage() {
     { id: "profile", label: "Profile", icon: User },
     { id: "team", label: "Team & Roles", icon: Shield },
     { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "api", label: "API Keys", icon: Key },
     { id: "webhooks", label: "Webhooks", icon: Webhook },
     { id: "import", label: "Import", icon: Upload },
   ];
@@ -91,13 +87,13 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div className="flex gap-6">
-        <nav className="w-48 shrink-0 space-y-0.5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
+        <nav className="scrollbar-none -mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:w-48 sm:shrink-0 sm:flex-col sm:gap-0.5 sm:overflow-visible sm:px-0">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+              className={`flex min-h-[44px] w-auto shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-colors sm:w-full sm:min-h-0 ${
                 tab === id
                   ? "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
@@ -109,12 +105,11 @@ export default function SettingsPage() {
           ))}
         </nav>
 
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           {tab === "organization" && <OrgSettings />}
           {tab === "profile" && <ProfileSettings />}
           {tab === "team" && <TeamSettings />}
           {tab === "notifications" && <NotificationSettings />}
-          {tab === "api" && <ApiSettings />}
           {tab === "webhooks" && <WebhookSettings />}
           {tab === "import" && <ImportSettings />}
         </div>
@@ -528,7 +523,7 @@ function OrgSettings() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <SettingsSection title="Organization Details">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FieldGroup label="Organization Name">
             <input
               value={form.name}
@@ -552,17 +547,6 @@ function OrgSettings() {
             className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:bg-neutral-900"
           />
         </FieldGroup>
-      </SettingsSection>
-
-      <SettingsSection title="Timeless brand">
-        <p className="text-xs text-muted-foreground">
-          Official logo variants used across the product (light/dark, solid plate and mark-only).
-        </p>
-        <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
-          <Logo size={36} style="solid" showWordmark />
-          <Logo size={36} style="mark" />
-        </div>
-        <LogoGallery />
       </SettingsSection>
 
       <div className="flex items-center justify-end gap-2">
@@ -632,7 +616,7 @@ function ProfileSettings() {
     <div className="space-y-6">
       <form onSubmit={handleProfileSubmit} className="space-y-6">
         <SettingsSection title="Personal Information">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FieldGroup label="First Name">
               <input
                 value={form.first_name}
@@ -868,6 +852,23 @@ function TeamSettings() {
 }
 
 function NotificationSettings() {
+  // The preferences UI below is fully wired (PUT /notifications/preferences),
+  // but the feature is intentionally veiled until notification delivery ships.
+  return (
+    <div className="relative">
+      <div className="pointer-events-none select-none blur-sm" aria-hidden>
+        <NotificationSettingsInner />
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="rounded-full border border-border bg-card/90 px-4 py-2 text-sm font-medium shadow-sm">
+          Cooking 🍳
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function NotificationSettingsInner() {
   const { data, isLoading } = useNotificationPreferences();
   const updatePref = useUpdateNotificationPreference();
 
@@ -899,41 +900,51 @@ function NotificationSettings() {
   }
 
   return (
-    <div className="space-y-6">
-      <SettingsSection title="Notification Preferences">
-        <div className="mb-2 grid grid-cols-[1fr_auto_auto] gap-x-6 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          <span>Event</span>
-          <span>In-app</span>
-          <span>Email</span>
+    <div className="relative">
+      <div className="pointer-events-none select-none blur-[6px] opacity-60">
+        <div className="space-y-6">
+          <SettingsSection title="Notification Preferences">
+            <div className="mb-2 grid grid-cols-[1fr_auto_auto] gap-x-6 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <span>Event</span>
+              <span>In-app</span>
+              <span>Email</span>
+            </div>
+            <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
+              {Object.entries(LABELS).map(([type, { label, description }]) => {
+                const pref = prefs.find((p) => p.type === type);
+                const inApp = pref?.in_app ?? true;
+                const email = pref?.email ?? true;
+                return (
+                  <div key={type} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-6 py-3">
+                    <div>
+                      <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{label}</p>
+                      <p className="text-xs text-muted-foreground">{description}</p>
+                    </div>
+                    <div
+                      className={`relative h-5 w-9 rounded-full transition-colors ${inApp ? "bg-neutral-900 dark:bg-neutral-100" : "bg-neutral-200 dark:bg-neutral-700"}`}
+                    >
+                      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform dark:bg-neutral-900 ${inApp ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </div>
+                    <div
+                      className={`relative h-5 w-9 rounded-full transition-colors ${email ? "bg-neutral-900 dark:bg-neutral-100" : "bg-neutral-200 dark:bg-neutral-700"}`}
+                    >
+                      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform dark:bg-neutral-900 ${email ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </SettingsSection>
         </div>
-        <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
-          {Object.entries(LABELS).map(([type, { label, description }]) => {
-            const pref = prefs.find((p) => p.type === type);
-            const inApp = pref?.in_app ?? true;
-            const email = pref?.email ?? true;
-            return (
-              <div key={type} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-6 py-3">
-                <div>
-                  <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{label}</p>
-                  <p className="text-xs text-muted-foreground">{description}</p>
-                </div>
-                <button
-                  onClick={() => toggle(type, "in_app", inApp)}
-                  className={`relative h-5 w-9 rounded-full transition-colors ${inApp ? "bg-neutral-900 dark:bg-neutral-100" : "bg-neutral-200 dark:bg-neutral-700"}`}
-                >
-                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform dark:bg-neutral-900 ${inApp ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-                <button
-                  onClick={() => toggle(type, "email", email)}
-                  className={`relative h-5 w-9 rounded-full transition-colors ${email ? "bg-neutral-900 dark:bg-neutral-100" : "bg-neutral-200 dark:bg-neutral-700"}`}
-                >
-                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform dark:bg-neutral-900 ${email ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-              </div>
-            );
-          })}
+      </div>
+
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+          <span className="text-4xl">🍳</span>
+          <p className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Cooking</p>
+          <p className="text-sm text-muted-foreground">This feature is being prepared</p>
         </div>
-      </SettingsSection>
+      </div>
     </div>
   );
 }
@@ -1036,37 +1047,6 @@ function ImportSettings() {
             <p className="font-medium text-neutral-700 dark:text-neutral-300">Sponsors</p>
             <p>campaign_id (required), company_id or company_name (required), stage, tier, notes, deal_value, probability</p>
           </div>
-        </div>
-      </SettingsSection>
-    </div>
-  );
-}
-
-function ApiSettings() {
-  return (
-    <div className="space-y-6">
-      <SettingsSection title="API Keys">
-        <p className="text-xs text-muted-foreground">
-          API keys allow external systems to access Timeless programmatically.
-        </p>
-        <button className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
-          Generate New Key
-        </button>
-      </SettingsSection>
-
-      <SettingsSection title="Integrations">
-        <p className="text-xs text-muted-foreground">
-          Connect external services to automate workflows.
-        </p>
-        <div className="grid grid-cols-3 gap-3">
-          {["Slack", "HubSpot", "Salesforce", "Google Calendar", "Zapier"].map((name) => (
-            <div key={name} className="flex items-center justify-between rounded-lg border border-border p-3">
-              <span className="text-xs font-medium">{name}</span>
-              <button className="text-[10px] font-medium text-primary hover:underline">
-                Connect
-              </button>
-            </div>
-          ))}
         </div>
       </SettingsSection>
     </div>
