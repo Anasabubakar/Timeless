@@ -6,13 +6,14 @@ import { useAuthStore } from "@/stores/auth";
 
 export function useRequireAuth() {
   const router = useRouter();
-  const { isAuthenticated, tokens } = useAuthStore();
+  const { isAuthenticated, tokens, hasHydrated } = useAuthStore();
 
   useEffect(() => {
+    if (!hasHydrated) return;
     if (!isAuthenticated || !tokens?.access_token) {
       router.replace("/login");
     }
-  }, [isAuthenticated, tokens, router]);
+  }, [hasHydrated, isAuthenticated, tokens, router]);
 
-  return { isAuthenticated };
+  return { isAuthenticated: hasHydrated ? isAuthenticated : true };
 }
