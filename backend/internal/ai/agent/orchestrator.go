@@ -21,6 +21,10 @@ const (
 	AgentAnalytics     AgentType = "analytics"
 	AgentMemory        AgentType = "memory"
 	AgentStrategy      AgentType = "strategy"
+
+	AgentWorkspaceDiscovery AgentType = "workspace_discovery"
+	AgentGoalRecommendation AgentType = "goal_recommendation"
+	AgentAutomationPlanning AgentType = "automation_planning"
 )
 
 type Agent interface {
@@ -85,6 +89,10 @@ func (o *Orchestrator) initAgents() {
 	o.Register(NewAnalyticsAgent(p))
 	o.Register(NewMemoryAgent(p))
 	o.Register(NewStrategyAgent(p))
+
+	o.Register(NewWorkspaceDiscoveryAgent(p))
+	o.Register(NewGoalRecommendationAgent(p))
+	o.Register(NewAutomationPlanningAgent(p))
 }
 
 func (o *Orchestrator) Register(agent Agent) {
@@ -117,7 +125,6 @@ func (o *Orchestrator) Route(ctx context.Context, input *Input) (AgentType, erro
 	}
 
 	resp, err := p.Complete(ctx, &provider.CompletionRequest{
-		Model: "gpt-4o-mini",
 		Messages: []provider.Message{
 			{
 				Role:    provider.RoleSystem,
