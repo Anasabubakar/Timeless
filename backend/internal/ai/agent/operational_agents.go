@@ -37,7 +37,7 @@ func (a *MeetingAgent) Execute(ctx context.Context, input *Input) (*Output, erro
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   1536,
 		Temperature: 0.6,
@@ -82,7 +82,7 @@ func (a *AnalyticsAgent) Execute(ctx context.Context, input *Input) (*Output, er
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   2048,
 		Temperature: 0.3,
@@ -127,7 +127,7 @@ func (a *MemoryAgent) Execute(ctx context.Context, input *Input) (*Output, error
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o-mini",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   1024,
 		Temperature: 0.3,
@@ -172,7 +172,7 @@ func (a *StrategyAgent) Execute(ctx context.Context, input *Input) (*Output, err
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   2048,
 		Temperature: 0.7,
