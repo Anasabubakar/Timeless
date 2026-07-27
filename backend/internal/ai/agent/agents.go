@@ -53,7 +53,7 @@ func (a *ResearchAgent) Execute(ctx context.Context, input *Input) (*Output, err
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   2048,
 		Temperature: 0.7,
@@ -97,7 +97,7 @@ func (a *QualificationAgent) Execute(ctx context.Context, input *Input) (*Output
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   1024,
 		Temperature: 0.3,
@@ -145,7 +145,7 @@ func (a *OutreachAgent) Execute(ctx context.Context, input *Input) (*Output, err
 	}
 
 	resp, err := a.provider.Complete(ctx, &provider.CompletionRequest{
-		Model:       "gpt-4o",
+		Model:       "",
 		Messages:    messages,
 		MaxTokens:   1024,
 		Temperature: 0.8,
