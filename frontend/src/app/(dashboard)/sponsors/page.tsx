@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, GripVertical, Search, Filter } from "lucide-react";
 import { motion } from "motion/react";
+import { useNewParam } from "@/hooks/use-new-param";
 import { cn } from "@/lib/utils";
 import { useSponsors, useCreateSponsor } from "@/queries/sponsors";
 import { useCompanies } from "@/queries/companies";
@@ -27,6 +28,7 @@ const STAGES = [
 
 export default function SponsorsPage() {
   const [showCreate, setShowCreate] = useState(false);
+  useNewParam(() => setShowCreate(true));
   const [stageFilter, setStageFilter] = useState<string | undefined>();
   const { data, isLoading } = useSponsors({ stage: stageFilter });
 
@@ -39,7 +41,7 @@ export default function SponsorsPage() {
 
   return (
     <motion.div className="space-y-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Pipeline</h1>
           <p className="text-sm text-muted-foreground">
@@ -56,11 +58,11 @@ export default function SponsorsPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex gap-3 overflow-x-auto pb-4">
+        <div className="flex gap-3 overflow-x-auto pb-4 scroll-snap-x scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
           {STAGES.map((stage) => (
             <div
               key={stage.id}
-              className="w-[280px] shrink-0 animate-pulse rounded-xl border border-border bg-muted/20 h-[320px]"
+              className="w-[85vw] max-w-[280px] shrink-0 scroll-snap-start animate-pulse rounded-xl border border-border bg-muted/20 h-[320px] sm:w-[280px]"
             />
           ))}
         </div>
@@ -75,11 +77,11 @@ export default function SponsorsPage() {
           </button>
         </div>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-4">
+        <div className="flex gap-3 overflow-x-auto pb-4 scroll-snap-x scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
           {STAGES.map((stage, i) => (
             <motion.div
               key={stage.id}
-              className="flex w-[280px] shrink-0 flex-col rounded-xl border border-border bg-muted/20"
+              className="flex w-[85vw] max-w-[280px] shrink-0 scroll-snap-start flex-col rounded-xl border border-border bg-muted/20 sm:w-[280px]"
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: i * 0.05 }}
@@ -201,7 +203,7 @@ function CreateSponsorDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <select
             value={form.company_id}
             onChange={(e) => setForm({ ...form, company_id: e.target.value })}
-            className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+            className="h-9 w-full rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700"
             required
           >
             <option value="">Select company...</option>
@@ -212,7 +214,7 @@ function CreateSponsorDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <select
             value={form.campaign_id}
             onChange={(e) => setForm({ ...form, campaign_id: e.target.value })}
-            className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+            className="h-9 w-full rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700"
             required
           >
             <option value="">Select campaign...</option>
@@ -220,11 +222,11 @@ function CreateSponsorDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <select
               value={form.stage}
               onChange={(e) => setForm({ ...form, stage: e.target.value })}
-              className="h-9 rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+              className="h-9 rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700"
             >
               {STAGES.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
@@ -235,27 +237,27 @@ function CreateSponsorDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               type="number"
               value={form.deal_value}
               onChange={(e) => setForm({ ...form, deal_value: e.target.value })}
-              className="h-9 rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+              className="h-9 rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700"
             />
           </div>
           <input
             placeholder="Tier (e.g. Gold, Silver, Platinum)"
             value={form.tier}
             onChange={(e) => setForm({ ...form, tier: e.target.value })}
-            className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+            className="h-9 w-full rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700"
           />
           <DialogFooter>
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50"
+              className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={createSponsor.isPending}
-              className="h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+              className="h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
               {createSponsor.isPending ? "Adding..." : "Add Sponsor"}
             </button>
