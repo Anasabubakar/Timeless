@@ -41,7 +41,7 @@ function GenerateDialog({ open, onClose }: { open: boolean; onClose: () => void 
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-white rounded-xl border border-neutral-200 p-6 shadow-xl">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-purple-500" />
@@ -109,7 +109,7 @@ export default function ProposalsPage() {
 
   return (
     <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Proposals</h1>
           <p className="text-sm text-muted-foreground mt-1">
