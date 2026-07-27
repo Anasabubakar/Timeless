@@ -38,8 +38,13 @@ func (o *OpenRouter) Models() []string {
 }
 
 func (o *OpenRouter) Complete(ctx context.Context, req *CompletionRequest) (*CompletionResponse, error) {
+	model := req.Model
+	if model == "" {
+		model = "openai/gpt-4o-mini"
+	}
+
 	body := map[string]interface{}{
-		"model":    req.Model,
+		"model":    model,
 		"messages": req.Messages,
 	}
 	if req.Temperature > 0 {
