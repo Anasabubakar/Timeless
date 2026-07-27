@@ -13,10 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import type { Contact } from "@/types";
 import { motion } from "motion/react";
+import { useNewParam } from "@/hooks/use-new-param";
 
 export default function ContactsPage() {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  useNewParam(() => setShowCreate(true));
   const { data, isLoading } = useContacts({ search });
   const deleteContact = useDeleteContact();
 
@@ -24,7 +26,7 @@ export default function ContactsPage() {
 
   return (
     <motion.div className="space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Contacts</h1>
           <p className="text-sm text-muted-foreground">
@@ -58,7 +60,7 @@ export default function ContactsPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-28 animate-pulse rounded-xl border border-border bg-muted/30" />
           ))}
@@ -74,7 +76,7 @@ export default function ContactsPage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {contacts.map((contact) => (
             <div
               key={contact.id}
@@ -151,19 +153,19 @@ function CreateContactDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <DialogTitle>Add Contact</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
               placeholder="First name"
               value={form.first_name}
               onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-              className="h-9 rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+              className="h-9 rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
               required
             />
             <input
               placeholder="Last name"
               value={form.last_name}
               onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-              className="h-9 rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+              className="h-9 rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
               required
             />
           </div>
@@ -172,32 +174,32 @@ function CreateContactDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             type="email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+            className="h-9 w-full rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
           />
           <input
             placeholder="Job title"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+            className="h-9 w-full rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
           />
           <input
             placeholder="Phone"
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10"
+            className="h-9 w-full rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:focus:ring-neutral-100/10"
           />
           <DialogFooter>
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50"
+              className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={createContact.isPending}
-              className="h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+              className="h-8 rounded-lg bg-neutral-900 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
               {createContact.isPending ? "Creating..." : "Create"}
             </button>
