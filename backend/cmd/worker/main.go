@@ -9,6 +9,7 @@ import (
 
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/database"
+	"github.com/timeless/backend/internal/security"
 	"github.com/timeless/backend/internal/worker"
 )
 
@@ -43,8 +44,10 @@ func main() {
 		},
 	)
 
+	cipher := security.NewCredentialCipher(cfg.JWTSecret)
+
 	mux := asynq.NewServeMux()
-	handlers := worker.NewHandlers(logger, db)
+	handlers := worker.NewHandlers(logger, db, cipher)
 	worker.RegisterHandlers(mux, handlers)
 
 	logger.Info("starting worker", "redis", cfg.RedisURL)
