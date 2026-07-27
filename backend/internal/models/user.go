@@ -21,6 +21,9 @@ type User struct {
 	LastLoginAt    *time.Time     `json:"last_login_at,omitempty"`
 	Preferences    datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"preferences"`
 
+	OnboardingCompleted   bool       `gorm:"not null;default:false" json:"onboarding_completed"`
+	OnboardingCompletedAt *time.Time `json:"onboarding_completed_at,omitempty"`
+
 	Organization  Organization   `gorm:"foreignKey:OrganizationID" json:"-"`
 	Roles         []Role         `gorm:"many2many:user_roles" json:"roles,omitempty"`
 	OAuthAccounts []OAuthAccount `gorm:"foreignKey:UserID" json:"-"`
