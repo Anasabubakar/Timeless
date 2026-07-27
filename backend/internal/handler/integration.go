@@ -80,6 +80,23 @@ func (h *IntegrationHandler) Update(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": integration})
 }
 
+func (h *IntegrationHandler) Connect(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	userID := middleware.GetUserID(c)
+	provider := c.Params("provider")
+
+	var input service.ConnectInput
+	if err := c.Bind().JSON(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	rec, err := h.svc.Connect(c.Context(), orgID, userID, provider, input)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"data": rec})
+}
+
 func (h *IntegrationHandler) Delete(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
 	id, err := uuid.Parse(c.Params("id"))
