@@ -116,7 +116,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
           <p className="text-sm text-muted-foreground">Pipeline performance and sponsorship metrics</p>
@@ -124,14 +124,14 @@ export default function AnalyticsPage() {
         <div className="flex gap-2">
           <button
             onClick={() => downloadCSV(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1"}/analytics/export/sponsors`, accessToken, `sponsors_export_${new Date().toISOString().slice(0, 10)}.csv`)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium hover:bg-muted transition-colors"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium hover:bg-muted transition-colors sm:flex-none"
           >
             <Download className="h-3.5 w-3.5" />
             Export Sponsors
           </button>
           <button
             onClick={() => downloadCSV(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1"}/analytics/export/campaigns`, accessToken, `campaigns_export_${new Date().toISOString().slice(0, 10)}.csv`)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium hover:bg-muted transition-colors"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium hover:bg-muted transition-colors sm:flex-none"
           >
             <Download className="h-3.5 w-3.5" />
             Export Campaigns
@@ -140,9 +140,9 @@ export default function AnalyticsPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {kpiCards.map((k) => (
-          <div key={k.name} className="rounded-xl border border-border bg-card p-5">
+          <div key={k.name} className="rounded-xl border border-border bg-card p-4 sm:p-5">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">{k.name}</span>
               <span className={cn("text-[10px] font-medium flex items-center gap-0.5", k.positive ? "text-emerald-500" : "text-red-400")}>{k.positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}{k.change}</span>
@@ -155,10 +155,10 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         {/* Time Series */}
-        <div className="col-span-2 rounded-xl border border-border bg-card p-5">
-          <div className="flex items-center justify-between mb-4">
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-sm font-medium">Trend Over Time</h2>
               <p className="text-xs text-muted-foreground">{metricOptions.find((m) => m.value === metric)?.label} over the last {period} days</p>
@@ -205,7 +205,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Funnel + Velocity */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-5">
           <h2 className="text-sm font-medium">Pipeline Funnel</h2>
           <p className="text-xs text-muted-foreground mb-4">Sponsor progression through stages</p>
@@ -297,7 +297,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Funnel Details + Recent Activity */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-5">
           <h2 className="text-sm font-medium">Pipeline Funnel Details</h2>
           <p className="text-xs text-muted-foreground mb-4">Count, value, and average days per stage</p>
@@ -350,7 +350,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-5">
           <p className="text-sm text-muted-foreground">Active Campaigns</p>
           <p className="mt-1 text-3xl font-semibold">{stats?.active_campaigns ?? 0}</p>
