@@ -20,6 +20,10 @@ export function useIntegrations() {
   return useQuery({
     queryKey: ["integrations"],
     queryFn: () => api.get<{ data: Integration[] }>("/integrations"),
+    refetchInterval: (query) => {
+      const integrations = query.state.data?.data ?? [];
+      return integrations.some((i) => i.status === "syncing") ? 3000 : false;
+    },
   });
 }
 
@@ -58,6 +62,17 @@ export function useDeleteIntegration() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/integrations/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["integrations"] });
+    },
+  });
+}
+
+export function useConnectIntegration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ provider, credentials }: { provider: string; credentials: Record<string, string> }) =>
+      api.post<{ data: Integration }>(`/integrations/${provider}/connect`, { credentials }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["integrations"] });
     },
