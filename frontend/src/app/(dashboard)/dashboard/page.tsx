@@ -11,6 +11,7 @@ import {
 import { motion } from "motion/react";
 import { cn, formatCurrency, formatNumber } from "@/lib/utils";
 import { useDashboardStats, usePipelineAnalytics, useRecentActivity } from "@/queries/analytics";
+import { useIntegrations } from "@/queries/integrations";
 
 const stageColors: Record<string, string> = {
   prospect: "bg-neutral-200",
@@ -47,6 +48,9 @@ export default function DashboardPage() {
   const { data: statsData, isLoading: statsLoading } = useDashboardStats();
   const { data: pipelineData, isLoading: pipelineLoading } = usePipelineAnalytics();
   const { data: activityData, isLoading: activityLoading } = useRecentActivity();
+  const { data: integrationsData } = useIntegrations();
+
+  const syncingIntegrations = (integrationsData?.data ?? []).filter((i) => i.status === "syncing");
 
   const stats = statsData?.data;
   const pipeline = pipelineData?.data ?? [];
@@ -97,22 +101,35 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {syncingIntegrations.length > 0 && (
+        <motion.div
+          className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          <span className="text-sm">
+            Syncing your workspace... ({syncingIntegrations.map((i) => i.provider).join(", ")})
+          </span>
+        </motion.div>
+      )}
+
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {kpis.map((stat, i) => (
           <motion.div
             key={stat.name}
-            className="rounded-xl border border-border bg-card p-5"
+            className="rounded-xl border border-border bg-card p-4 sm:p-5"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: i * 0.06 }}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">{stat.name}</span>
-              <stat.icon className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-sm text-muted-foreground">{stat.name}</span>
+              <stat.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-semibold tracking-tight">
+              <span className="text-xl font-semibold tracking-tight sm:text-2xl">
                 {stat.format === "currency"
                   ? formatCurrency(stat.value)
                   : stat.format === "percent"
@@ -129,10 +146,10 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {/* Pipeline Overview */}
         <motion.div
-          className="col-span-2 rounded-xl border border-border bg-card p-5"
+          className="rounded-xl border border-border bg-card p-5 lg:col-span-2"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.25 }}
