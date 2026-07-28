@@ -88,13 +88,35 @@ func (r *SyncRunRepository) ListByOrg(ctx context.Context, orgID uuid.UUID, limi
 	return runs, err
 }
 
+// staleRunThreshold bounds how long a "running" sync_run is trusted before
+// it's treated as abandoned (worker crashed/restarted mid-sync) rather than
+// genuinely still in flight. Without this, a single killed worker process
+// would permanently wedge HasRunning() to true for that integration —
+// nothing would ever sync again.
+const staleRunThreshold = 10 * time.Minute
+
 // HasRunning checks whether a sync is already in flight for this
 // integration, so the scheduler and webhook triggers never enqueue a
-// duplicate concurrent job for the same connection.
+// duplicate concurrent job for the same connection. A "running" row older
+// than staleRunThreshold doesn't count — see ReapStaleRuns.
 func (r *SyncRunRepository) HasRunning(ctx context.Context, integrationID uuid.UUID) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&models.SyncRun{}).
-		Where("integration_id = ? AND status = ?", integrationID, "running").
+		Where("integration_id = ? AND status = ? AND started_at > ?", integrationID, "running", time.Now().Add(-staleRunThreshold)).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// ReapStaleRuns marks any "running" sync_run older than staleRunThreshold
+// as failed — recovery for a worker process that crashed or was
+// force-killed mid-sync, so those integrations aren't wedged forever.
+// Returns the number of runs reaped.
+func (r *SyncRunRepository) ReapStaleRuns(ctx context.Context) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.SyncRun{}).
+		Where("status = ? AND started_at <= ?", "running", time.Now().Add(-staleRunThreshold)).
+		Updates(map[string]interface{}{
+			"status": "failed",
+			"error":  "worker process stopped before this sync finished (reaped on restart)",
+		})
+	return result.RowsAffected, result.Error
 }
