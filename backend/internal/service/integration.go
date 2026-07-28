@@ -69,6 +69,57 @@ func (s *IntegrationService) Revoke(ctx context.Context, orgID, id uuid.UUID) er
 	return s.repo.Update(ctx, rec)
 }
 
+// RotateCredentialsResult reports how many of the org's stored credentials
+// were re-encrypted under the current key during a rotation pass.
+type RotateCredentialsResult struct {
+	Checked int `json:"checked"`
+	Rotated int `json:"rotated"`
+}
+
+// RotateCredentials re-encrypts every integration whose stored credentials
+// aren't already under the cipher's current key. Run this after deploying
+// a new CREDENTIALS_ENCRYPTION_KEY (with the old key added to
+// CREDENTIALS_ENCRYPTION_KEY_PREVIOUS so this pass can still decrypt the
+// old rows) to finish the rotation instead of leaving old rows on the
+// retired key indefinitely.
+func (s *IntegrationService) RotateCredentials(ctx context.Context, orgID uuid.UUID) (*RotateCredentialsResult, error) {
+	integrations, err := s.repo.List(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &RotateCredentialsResult{}
+	for i := range integrations {
+		rec := &integrations[i]
+		result.Checked++
+
+		var stored struct {
+			Enc string `json:"enc"`
+		}
+		if err := json.Unmarshal(rec.Credentials, &stored); err != nil || stored.Enc == "" {
+			continue
+		}
+		if !s.cipher.NeedsRotation(stored.Enc) {
+			continue
+		}
+
+		credentials, err := s.decryptCredentials(rec.Credentials)
+		if err != nil {
+			return result, fmt.Errorf("decrypt %s credentials: %w", rec.Provider, err)
+		}
+		encrypted, err := s.encryptCredentials(credentials)
+		if err != nil {
+			return result, fmt.Errorf("re-encrypt %s credentials: %w", rec.Provider, err)
+		}
+		rec.Credentials = encrypted
+		if err := s.repo.Update(ctx, rec); err != nil {
+			return result, err
+		}
+		result.Rotated++
+	}
+	return result, nil
+}
+
 type ConnectInput struct {
 	Credentials map[string]string `json:"credentials"`
 }

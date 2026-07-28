@@ -151,6 +151,17 @@ func (h *IntegrationHandler) ZapierApps(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"data": apps, "agentic_mode": agentic})
 }
 
+// RotateCredentials re-encrypts every stored credential in the org that
+// isn't already under the current encryption key.
+func (h *IntegrationHandler) RotateCredentials(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	result, err := h.svc.RotateCredentials(c.Context(), orgID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(fiber.Map{"data": result})
+}
+
 type pushNotionPageRequest struct {
 	Properties             map[string]interface{} `json:"properties"`
 	ExpectedLastEditedTime string                 `json:"expected_last_edited_time"`
