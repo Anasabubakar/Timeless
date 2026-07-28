@@ -12,8 +12,10 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
+	"github.com/timeless/backend/internal/dedupe"
 	"github.com/timeless/backend/internal/integration"
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/normalize"
 	"github.com/timeless/backend/internal/repository"
 	"github.com/timeless/backend/internal/security"
 )
@@ -133,6 +135,16 @@ func (r *integrationSyncRunner) run(ctx context.Context, integrationID, trigger 
 		result.Warnings = append(result.Warnings, warnings...)
 	}
 
+	// New companies were just created (or matched) by this sync — merge
+	// any duplicates that resulted (e.g. Notion and Apollo both surfacing
+	// "Acme Inc" with slightly different casing/domain formatting) before
+	// the dashboard/CRM ever shows them side by side.
+	if len(result.Contacts) > 0 || len(result.DiscoveredContacts) > 0 {
+		if _, err := dedupe.MergeDuplicateCompanies(ctx, r.db, rec.OrganizationID); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("dedupe companies: %v", err))
+		}
+	}
+
 	newConfig := mergeConfig(rec.Config, result.Details, result.State)
 	now := time.Now()
 	r.db.WithContext(ctx).Model(&rec).Updates(map[string]interface{}{
@@ -234,16 +246,17 @@ func (r *integrationSyncRunner) ingestDiscoveredContacts(ctx context.Context, or
 
 		var company models.Company
 		q := r.db.WithContext(ctx).Where("organization_id = ?", orgID)
-		if dc.CompanyDomain != "" {
-			q = q.Where("domain = ?", dc.CompanyDomain)
+		if normDomain := normalize.Domain(dc.CompanyDomain); normDomain != "" {
+			q = q.Where("LOWER(domain) = ?", normDomain)
 		} else {
-			q = q.Where("name = ?", dc.CompanyName)
+			q = q.Where("LOWER(name) = ?", normalize.CompanyName(dc.CompanyName))
 		}
 		if err := q.First(&company).Error; err != nil {
 			continue
 		}
 
-		first, last := splitFullName(dc.Name)
+		dc.Email = normalize.Email(dc.Email)
+		first, last := splitFullName(normalize.PersonName(dc.Name))
 		profileData, _ := json.Marshal(map[string]interface{}{
 			"role_queried": dc.RoleQueried,
 			"confidence":   dc.Confidence,
@@ -368,42 +381,22 @@ func (r *integrationSyncRunner) finishRun(ctx context.Context, run *models.SyncR
 }
 
 // ingestContacts upserts each synced contact and its company into the real
-// CRM tables (dedupe by domain for companies, by email for contacts) so the
-// dashboard is populated the moment a sync completes, not simulated.
+// CRM tables. Companies dedupe by normalized domain (falling back to
+// normalized name), and contacts dedupe by normalized email, so
+// "Example.com"/"www.example.com"/"https://example.com/" and
+// "Name@X.com"/"name@x.com" never create duplicate rows.
 func (r *integrationSyncRunner) ingestContacts(ctx context.Context, orgID uuid.UUID, contacts []integration.ContactRecord) error {
 	for _, c := range contacts {
 		var companyID *uuid.UUID
 		if c.CompanyName != "" {
-			var company models.Company
-			query := r.db.WithContext(ctx).Where("organization_id = ?", orgID)
-			if c.CompanyDomain != "" {
-				query = query.Where("domain = ?", c.CompanyDomain)
-			} else {
-				query = query.Where("name = ?", c.CompanyName)
-			}
-			err := query.First(&company).Error
-			if err == gorm.ErrRecordNotFound {
-				company = models.Company{
-					OrganizationID: orgID,
-					Name:           c.CompanyName,
-					Status:         "active",
-					Source:         strPtr("apollo"),
-				}
-				if c.CompanyDomain != "" {
-					company.Domain = &c.CompanyDomain
-				}
-				if c.CompanyWebsite != "" {
-					company.Website = &c.CompanyWebsite
-				}
-				if createErr := r.db.WithContext(ctx).Create(&company).Error; createErr != nil {
-					return createErr
-				}
-			} else if err != nil {
+			company, err := r.findOrCreateCompany(ctx, orgID, c.CompanyName, c.CompanyDomain, c.CompanyWebsite, "apollo")
+			if err != nil {
 				return err
 			}
 			companyID = &company.ID
 		}
 
+		c.Email = normalize.Email(c.Email)
 		if c.Email == "" && c.FirstName == "" && c.LastName == "" {
 			continue
 		}
@@ -435,6 +428,47 @@ func (r *integrationSyncRunner) ingestContacts(ctx context.Context, orgID uuid.U
 		}
 	}
 	return nil
+}
+
+// findOrCreateCompany matches an existing Company by normalized domain
+// (falling back to normalized name when there's no domain), so casing and
+// URL-formatting differences across providers never spawn a duplicate
+// company row for the same real organization.
+func (r *integrationSyncRunner) findOrCreateCompany(ctx context.Context, orgID uuid.UUID, name, domain, website, source string) (*models.Company, error) {
+	normDomain := normalize.Domain(domain)
+	normName := normalize.CompanyName(name)
+
+	var company models.Company
+	query := r.db.WithContext(ctx).Where("organization_id = ?", orgID)
+	if normDomain != "" {
+		query = query.Where("LOWER(domain) = ?", normDomain)
+	} else {
+		query = query.Where("LOWER(name) = ?", normName)
+	}
+	err := query.First(&company).Error
+	if err == nil {
+		return &company, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	company = models.Company{
+		OrganizationID: orgID,
+		Name:           name,
+		Status:         "active",
+		Source:         strPtr(source),
+	}
+	if normDomain != "" {
+		company.Domain = &normDomain
+	}
+	if website != "" {
+		company.Website = &website
+	}
+	if err := r.db.WithContext(ctx).Create(&company).Error; err != nil {
+		return nil, err
+	}
+	return &company, nil
 }
 
 // ingestNotes surfaces synced documents as Activity entries so they show up
