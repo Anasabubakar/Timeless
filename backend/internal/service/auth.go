@@ -460,6 +460,86 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 	return nil
 }
 
+// DisableMFA requires the current password as re-authentication before
+// turning MFA off — otherwise a hijacked, already-authenticated session
+// alone would be enough to strip account protection.
+func (s *AuthService) DisableMFA(ctx context.Context, userID uuid.UUID, currentPassword string) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return errors.New("user not found")
+	}
+	if user.PasswordHash == nil || bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(currentPassword)) != nil {
+		return errors.New("invalid credentials")
+	}
+
+	user.MFAEnabled = false
+	user.MFASecretEncrypted = nil
+	user.MFABackupCodesHash = datatypes.JSON("[]")
+	user.MFAEnrolledAt = nil
+	return s.userRepo.Update(ctx, user)
+}
+
+// VerifyMFALogin completes a login that Login() paused with ErrMFARequired.
+// Accepts either a live TOTP code or a backup code (consumed on use).
+func (s *AuthService) VerifyMFALogin(ctx context.Context, ticket, code string) (*models.User, *AuthTokens, error) {
+	userID, err := s.parseMFAPendingTicket(ticket)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, nil, errors.New("invalid or expired mfa ticket")
+	}
+	if !user.MFAEnabled || user.MFASecretEncrypted == nil {
+		return nil, nil, errors.New("mfa is not enabled for this account")
+	}
+	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
+		return nil, nil, ErrAccountLocked
+	}
+
+	secret, err := s.cipher.Decrypt(*user.MFASecretEncrypted)
+	if err != nil {
+		return nil, nil, errors.New("could not verify mfa code")
+	}
+
+	if security.ValidateTOTP(secret, code) {
+		return s.completeLogin(ctx, user)
+	}
+
+	if s.consumeBackupCode(ctx, user, code) {
+		return s.completeLogin(ctx, user)
+	}
+
+	s.recordFailedLogin(ctx, user)
+	return nil, nil, errors.New("invalid verification code")
+}
+
+// consumeBackupCode checks code against the stored hashes and, on match,
+// removes that hash so the code can't be reused.
+func (s *AuthService) consumeBackupCode(ctx context.Context, user *models.User, code string) bool {
+	var hashes []string
+	if err := json.Unmarshal(user.MFABackupCodesHash, &hashes); err != nil {
+		return false
+	}
+
+	for i, h := range hashes {
+		if bcrypt.CompareHashAndPassword([]byte(h), []byte(code)) == nil {
+			remaining := append(hashes[:i:i], hashes[i+1:]...)
+			remainingJSON, err := json.Marshal(remaining)
+			if err != nil {
+				return false
+			}
+			user.MFABackupCodesHash = datatypes.JSON(remainingJSON)
+			if err := s.userRepo.Update(ctx, user); err != nil {
+				log.Printf("auth: failed to persist backup-code consumption for user %s: %v", user.ID, err)
+			}
+			return true
+		}
+	}
+	return false
+}
+
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	s.rdb.Set(ctx, "blacklist:"+refreshToken, "1", 7*24*time.Hour)
 	return nil
