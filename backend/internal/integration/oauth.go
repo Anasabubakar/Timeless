@@ -29,6 +29,10 @@ type OAuthProvider struct {
 	// CredentialKey is the key the exchanged access token is stored under in
 	// Integration.Credentials, matching what each Client's Validate/Sync expects.
 	CredentialKey string
+	// ExtraHeaders are sent on every token request (e.g. Notion requires
+	// Notion-Version on API calls; harmless to include on the token
+	// endpoint too since Notion's own examples do).
+	ExtraHeaders map[string]string
 }
 
 func (p *OAuthProvider) Configured() bool {
@@ -58,15 +62,31 @@ func (p *OAuthProvider) AuthorizeRedirect(redirectURI, state string) string {
 // Exchange swaps an authorization code for an access token and returns the
 // credentials map to store on the Integration record.
 func (p *OAuthProvider) Exchange(ctx context.Context, code, redirectURI string) (map[string]string, error) {
+	return p.token(ctx, map[string]string{
+		"grant_type":   "authorization_code",
+		"code":         code,
+		"redirect_uri": redirectURI,
+	})
+}
+
+// Refresh swaps a still-valid refresh token for a new access token. Per
+// Notion's current docs (developers.notion.com/reference/refresh-a-token),
+// the response rotates BOTH tokens — the old refresh token stops working,
+// so callers must persist the newly returned refresh_token too, not just
+// the access_token.
+func (p *OAuthProvider) Refresh(ctx context.Context, refreshToken string) (map[string]string, error) {
+	return p.token(ctx, map[string]string{
+		"grant_type":    "refresh_token",
+		"refresh_token": refreshToken,
+	})
+}
+
+func (p *OAuthProvider) token(ctx context.Context, grantParams map[string]string) (map[string]string, error) {
 	var body io.Reader
 	var contentType string
 
 	if p.BasicAuth {
-		payload, err := json.Marshal(map[string]string{
-			"grant_type":   "authorization_code",
-			"code":         code,
-			"redirect_uri": redirectURI,
-		})
+		payload, err := json.Marshal(grantParams)
 		if err != nil {
 			return nil, err
 		}
@@ -74,9 +94,9 @@ func (p *OAuthProvider) Exchange(ctx context.Context, code, redirectURI string) 
 		contentType = "application/json"
 	} else {
 		form := url.Values{}
-		form.Set("grant_type", "authorization_code")
-		form.Set("code", code)
-		form.Set("redirect_uri", redirectURI)
+		for k, v := range grantParams {
+			form.Set(k, v)
+		}
 		form.Set("client_id", p.ClientID)
 		form.Set("client_secret", p.ClientSecret)
 		body = strings.NewReader(form.Encode())
@@ -92,11 +112,14 @@ func (p *OAuthProvider) Exchange(ctx context.Context, code, redirectURI string) 
 		basic := base64.StdEncoding.EncodeToString([]byte(p.ClientID + ":" + p.ClientSecret))
 		req.Header.Set("Authorization", "Basic "+basic)
 	}
+	for k, v := range p.ExtraHeaders {
+		req.Header.Set(k, v)
+	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%s token exchange: %w", p.Provider, err)
+		return nil, fmt.Errorf("%s token request: %w", p.Provider, err)
 	}
 	defer resp.Body.Close()
 
@@ -105,19 +128,22 @@ func (p *OAuthProvider) Exchange(ctx context.Context, code, redirectURI string) 
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s token exchange returned HTTP %d: %s", p.Provider, resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("%s token request returned HTTP %d: %s", p.Provider, resp.StatusCode, string(respBody))
 	}
 
 	var token struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		WorkspaceID  string `json:"workspace_id"`
+		AccessToken   string `json:"access_token"`
+		RefreshToken  string `json:"refresh_token"`
+		WorkspaceID   string `json:"workspace_id"`
+		WorkspaceName string `json:"workspace_name"`
+		WorkspaceIcon string `json:"workspace_icon"`
+		BotID         string `json:"bot_id"`
 	}
 	if err := json.Unmarshal(respBody, &token); err != nil {
 		return nil, fmt.Errorf("%s token decode: %w", p.Provider, err)
 	}
 	if token.AccessToken == "" {
-		return nil, fmt.Errorf("%s token exchange returned no access_token", p.Provider)
+		return nil, fmt.Errorf("%s token request returned no access_token", p.Provider)
 	}
 
 	credentials := map[string]string{p.CredentialKey: token.AccessToken}
@@ -126,6 +152,15 @@ func (p *OAuthProvider) Exchange(ctx context.Context, code, redirectURI string) 
 	}
 	if token.WorkspaceID != "" {
 		credentials["workspace_id"] = token.WorkspaceID
+	}
+	if token.WorkspaceName != "" {
+		credentials["workspace_name"] = token.WorkspaceName
+	}
+	if token.WorkspaceIcon != "" {
+		credentials["workspace_icon"] = token.WorkspaceIcon
+	}
+	if token.BotID != "" {
+		credentials["bot_id"] = token.BotID
 	}
 	return credentials, nil
 }
