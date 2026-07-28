@@ -195,3 +195,16 @@ comparison purposes only — the original human-entered name is always what
 gets displayed/stored. Every ingestion path normalizes before it looks up
 an existing row, which is what actually prevents the duplicate in the
 first place (as opposed to merging it after the fact).
+
+## Data quality: dedupe/merge
+
+`internal/dedupe.MergeDuplicateCompanies` groups an org's companies by
+normalized domain (falling back to normalized name), keeps the most
+complete record in each group as primary (`completenessScore` counts
+filled-in fields), reassigns every related row (contacts, decision makers,
+sponsors, pain points) to it, unions tags, and soft-deletes the rest. It
+runs automatically after any sync that ingested contacts, and is also
+exposed as an on-demand maintenance action via `POST /companies/dedupe`.
+It lives in its own package (not under `service`, which imports `worker`)
+specifically so the background worker can call it too without an import
+cycle.
