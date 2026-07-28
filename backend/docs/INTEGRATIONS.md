@@ -208,3 +208,20 @@ exposed as an on-demand maintenance action via `POST /companies/dedupe`.
 It lives in its own package (not under `service`, which imports `worker`)
 specifically so the background worker can call it too without an import
 cycle.
+
+## Background workers: retry/backoff
+
+Sync failures aren't all handled the same way:
+
+- **Rate limit** (`integration.RateLimitError`): status → `retrying`, and a
+  custom asynq `RetryDelayFunc` honors the provider's own `Retry-After`
+  header instead of asynq's generic exponential curve.
+- **Auth expired** (`integration.AuthExpiredError`): the runner tries the
+  provider's `Refresher` (if it implements one) and retries once with the
+  rotated credentials. If that fails too, status → `expired` and the job
+  is told to stop retrying (`asynq.SkipRetry`) — retrying with the same
+  stale token can't ever succeed.
+- **Integration deleted mid-flight**: also `asynq.SkipRetry` — the record
+  can't reappear.
+- Anything else: status → `error`, and asynq's default retry/backoff
+  applies.
