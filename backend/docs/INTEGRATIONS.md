@@ -161,3 +161,12 @@ behind "never overwrite newer data with stale data." Exposed via
 `PATCH /integrations/notion/pages/:pageID`, which maps a conflict to HTTP
 409 so the frontend can show a specific "this changed in Notion" message
 instead of a generic failure.
+
+## Apollo: organization enrichment
+
+`ApolloClient.EnrichOrganization` calls `GET /api/v1/organizations/enrich`
+by domain and returns firmographic data (industry, employee count,
+revenue, funding, technologies, location) as-is from Apollo — the worker
+merges it directly into `Company.EnrichmentData`. Returns `(nil, nil)` —
+not an error — when Apollo simply has no record for a domain, so "no
+data" is never treated as a sync failure.
