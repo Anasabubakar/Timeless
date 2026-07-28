@@ -31,12 +31,34 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	authMw := middleware.NewAuth(cfg)
 	tenantMw := middleware.NewTenant(db)
 
+	// Email Provider Registry (built early: AuthService needs it for
+	// verification/reset emails, well before the /emails endpoints below).
+	emailRegistry := email.NewRegistry()
+	if cfg.SMTPHost != "" {
+		emailRegistry.Register(email.NewSMTP(email.SMTPConfig{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			Username: cfg.SMTPUser,
+			Password: cfg.SMTPPassword,
+			FromAddr: cfg.SMTPFrom,
+			FromName: cfg.SMTPFromName,
+			UseTLS:   cfg.SMTPUseTLS,
+		}))
+	}
+	if cfg.SendGridKey != "" {
+		emailRegistry.Register(email.NewSendGrid(cfg.SendGridKey))
+	}
+	emailSender := email.NewSender(emailRegistry)
+
 	// Repositories
 	userRepo := repository.NewUserRepository(db)
 	orgRepo := repository.NewOrganizationRepository(db)
+	sessionRepo := repository.NewSessionRepository(db)
+	emailVerifyRepo := repository.NewEmailVerificationRepository(db)
+	passwordResetRepo := repository.NewPasswordResetRepository(db)
 
 	// Services
-	authSvc := service.NewAuthService(userRepo, orgRepo, cfg, rdb)
+	authSvc := service.NewAuthService(userRepo, orgRepo, sessionRepo, emailVerifyRepo, passwordResetRepo, cfg, rdb, emailSender)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authSvc)
@@ -362,24 +384,6 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	team.Patch("/members/:id/roles", teamHandler.UpdateMemberRole)
 	team.Delete("/members/:id", teamHandler.RemoveMember)
 	team.Get("/roles", teamHandler.ListRoles)
-
-	// Email Provider Registry
-	emailRegistry := email.NewRegistry()
-	if cfg.SMTPHost != "" {
-		emailRegistry.Register(email.NewSMTP(email.SMTPConfig{
-			Host:     cfg.SMTPHost,
-			Port:     cfg.SMTPPort,
-			Username: cfg.SMTPUser,
-			Password: cfg.SMTPPassword,
-			FromAddr: cfg.SMTPFrom,
-			FromName: cfg.SMTPFromName,
-			UseTLS:   cfg.SMTPUseTLS,
-		}))
-	}
-	if cfg.SendGridKey != "" {
-		emailRegistry.Register(email.NewSendGrid(cfg.SendGridKey))
-	}
-	emailSender := email.NewSender(emailRegistry)
 
 	// Email endpoints
 	emailHandler := handler.NewEmailHandler(emailSender, workerClient)

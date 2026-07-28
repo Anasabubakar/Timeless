@@ -2,7 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -12,19 +16,78 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/timeless/backend/internal/config"
+	"github.com/timeless/backend/internal/email"
 	"github.com/timeless/backend/internal/models"
 	"github.com/timeless/backend/internal/repository"
+	"github.com/timeless/backend/internal/security"
 )
 
 type AuthService struct {
-	userRepo *repository.UserRepository
-	orgRepo  *repository.OrganizationRepository
-	cfg      *config.Config
-	rdb      *redis.Client
+	userRepo        *repository.UserRepository
+	orgRepo         *repository.OrganizationRepository
+	sessionRepo     *repository.SessionRepository
+	emailVerifyRepo *repository.EmailVerificationRepository
+	resetRepo       *repository.PasswordResetRepository
+	cfg             *config.Config
+	rdb             *redis.Client
+	mailer          *email.Sender
+	cipher          *security.CredentialCipher
 }
 
-func NewAuthService(userRepo *repository.UserRepository, orgRepo *repository.OrganizationRepository, cfg *config.Config, rdb *redis.Client) *AuthService {
-	return &AuthService{userRepo: userRepo, orgRepo: orgRepo, cfg: cfg, rdb: rdb}
+func NewAuthService(
+	userRepo *repository.UserRepository,
+	orgRepo *repository.OrganizationRepository,
+	sessionRepo *repository.SessionRepository,
+	emailVerifyRepo *repository.EmailVerificationRepository,
+	resetRepo *repository.PasswordResetRepository,
+	cfg *config.Config,
+	rdb *redis.Client,
+	mailer *email.Sender,
+) *AuthService {
+	return &AuthService{
+		userRepo:        userRepo,
+		orgRepo:         orgRepo,
+		sessionRepo:     sessionRepo,
+		emailVerifyRepo: emailVerifyRepo,
+		resetRepo:       resetRepo,
+		cfg:             cfg,
+		rdb:             rdb,
+		mailer:          mailer,
+		cipher:          security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...),
+	}
+}
+
+// generateSecureToken returns a URL-safe random token plus the sha256 hash
+// that should be persisted instead of the token itself — mirrors the
+// pattern used for credential encryption: never store the thing that
+// grants access, only something you can verify a presented value against.
+func generateSecureToken() (token, hash string, err error) {
+	raw := make([]byte, 32)
+	if _, err = rand.Read(raw); err != nil {
+		return "", "", err
+	}
+	token = hex.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(token))
+	hash = hex.EncodeToString(sum[:])
+	return token, hash, nil
+}
+
+func hashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+// sendAuthEmail best-effort sends a transactional auth email. A delivery
+// failure (or no provider configured, which is normal in dev) must never
+// fail the calling request — the token is still valid and usable, it just
+// wasn't emailed.
+func (s *AuthService) sendAuthEmail(ctx context.Context, msg *email.Message) {
+	if s.mailer == nil {
+		return
+	}
+	if _, err := s.mailer.Send(ctx, msg); err != nil {
+		log.Printf("auth: failed to send %s email to %v: %v", msg.Tags["category"], msg.To, err)
+	}
 }
 
 type RegisterInput struct {
