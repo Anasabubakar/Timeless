@@ -1,14 +1,18 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/hibiken/asynq"
 
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/database"
+	"github.com/timeless/backend/internal/integration"
+	"github.com/timeless/backend/internal/repository"
 	"github.com/timeless/backend/internal/security"
 	"github.com/timeless/backend/internal/worker"
 )
@@ -40,21 +44,38 @@ func main() {
 				"default":  3,
 				"low":      1,
 			},
-			Logger: &asynqLogger{logger: logger},
+			Logger:         &asynqLogger{logger: logger},
+			RetryDelayFunc: rateLimitAwareRetryDelay,
 		},
 	)
 
 	cipher := security.NewCredentialCipher(cfg.JWTSecret)
+	syncRunRepo := repository.NewSyncRunRepository(db)
+	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
 
 	mux := asynq.NewServeMux()
-	handlers := worker.NewHandlers(logger, db, cipher)
+	handlers := worker.NewHandlers(logger, db, cipher, syncRunRepo, registryCfg)
 	worker.RegisterHandlers(mux, handlers)
+
+	stopScheduler := worker.StartPeriodicResync(db, syncRunRepo, cfg, logger)
+	defer stopScheduler()
 
 	logger.Info("starting worker", "redis", cfg.RedisURL)
 	if err := srv.Run(mux); err != nil {
 		logger.Error("worker failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// rateLimitAwareRetryDelay backs off using the provider's own Retry-After
+// when a sync failed because of a rate limit, instead of asynq's generic
+// exponential curve — the provider told us exactly how long to wait.
+func rateLimitAwareRetryDelay(n int, e error, t *asynq.Task) time.Duration {
+	var rl *integration.RateLimitError
+	if errors.As(e, &rl) {
+		return rl.RetryAfterDuration(30 * time.Second)
+	}
+	return asynq.DefaultRetryDelayFunc(n, e, t)
 }
 
 type asynqLogger struct {
