@@ -255,3 +255,16 @@ timestamps, duration, records synced, warnings, and error. This is what
 lets the dashboard show real history ("2 failed syncs in the last 24h",
 per-run duration and record counts) instead of just a single
 `last_sync_at` timestamp.
+
+## Observability: API endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /integrations/dashboard` | Every integration's health, recent sync runs, and 24h failure count |
+| `GET /integrations/zapier/apps` | Connected apps discovered through Zapier |
+| `POST /integrations/:id/sync` | Manual "sync now" |
+| `POST /integrations/:id/revoke` | Wipe credentials, keep history |
+| `POST /integrations/rotate-credentials` | Re-encrypt credentials still on a retired key |
+| `POST /companies/dedupe` | On-demand duplicate-company merge |
+| `PATCH /integrations/notion/pages/:pageID` | Conflict-safe write-back to a Notion page |
+| `POST /integrations/notion/webhook` | Notion's real-time event receiver (public, signature-verified) |
