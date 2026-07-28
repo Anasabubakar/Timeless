@@ -25,11 +25,11 @@ type IntegrationService struct {
 	worker      *worker.Client
 }
 
-func NewIntegrationService(repo *repository.IntegrationRepository, syncRunRepo *repository.SyncRunRepository, cipher *security.CredentialCipher, workerClient *worker.Client) *IntegrationService {
+func NewIntegrationService(repo *repository.IntegrationRepository, syncRunRepo *repository.SyncRunRepository, cipher *security.CredentialCipher, workerClient *worker.Client, registryCfg integration.RegistryConfig) *IntegrationService {
 	return &IntegrationService{
 		repo:        repo,
 		syncRunRepo: syncRunRepo,
-		clients:     integration.Registry(),
+		clients:     integration.Registry(registryCfg),
 		cipher:      cipher,
 		worker:      workerClient,
 	}

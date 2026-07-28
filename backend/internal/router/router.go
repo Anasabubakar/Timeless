@@ -11,6 +11,7 @@ import (
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/email"
 	"github.com/timeless/backend/internal/handler"
+	"github.com/timeless/backend/internal/integration"
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/realtime"
 	"github.com/timeless/backend/internal/repository"
@@ -195,7 +196,8 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	integrationRepo := repository.NewIntegrationRepository(db)
 	syncRunRepo := repository.NewSyncRunRepository(db)
 	credentialCipher := security.NewCredentialCipher(cfg.JWTSecret)
-	integrationSvc := service.NewIntegrationService(integrationRepo, syncRunRepo, credentialCipher, workerClient)
+	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
+	integrationSvc := service.NewIntegrationService(integrationRepo, syncRunRepo, credentialCipher, workerClient, registryCfg)
 	integrationHandler := handler.NewIntegrationHandler(integrationSvc)
 	integrations := protected.Group("/integrations")
 	integrations.Get("/", integrationHandler.List)

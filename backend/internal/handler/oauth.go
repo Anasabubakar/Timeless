@@ -41,6 +41,7 @@ func NewOAuthHandler(cfg *config.Config, rdb *redis.Client, svc *service.Integra
 				TokenURL:      "https://api.notion.com/v1/oauth/token",
 				BasicAuth:     true,
 				CredentialKey: "token",
+				ExtraHeaders:  map[string]string{"Notion-Version": integration.NotionAPIVersion},
 			},
 			"apollo": {
 				Provider:      "apollo",
