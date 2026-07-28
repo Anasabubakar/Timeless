@@ -30,3 +30,13 @@ for the full architecture writeup.
 - A real-time webhook receiver with signature verification.
 - Conflict-safe write-back that refuses to overwrite a page edited in
   Notion since it was last read.
+
+### Added — Apollo
+
+- Organization enrichment by domain (industry, employee count, revenue,
+  funding, technologies, location).
+- Role-based decision-maker discovery against a fixed checklist (Founder,
+  CEO, Co-Founder, CMO, Head of Partnerships, and more), reporting
+  `Available: false` rather than fabricating data when nobody matches.
+- Corrected the people-search endpoint to `mixed_people/api_search` per
+  current docs.
