@@ -57,3 +57,11 @@ sections below). The flow:
 3. Notion's token response includes `access_token`, `refresh_token`,
    `workspace_id`, `workspace_name`, `workspace_icon`, and `bot_id` — all of
    which are preserved in the encrypted credentials blob.
+
+## Credential storage & encryption
+
+Credentials are never stored in the clear. `IntegrationService` encrypts
+the credentials map (JSON-marshaled, then AES-256-GCM-sealed) before
+writing to `Integration.Credentials`, and decrypts on the way out — no
+handler or frontend code ever sees a raw token. See
+`internal/security/crypto.go` for the cipher implementation.
