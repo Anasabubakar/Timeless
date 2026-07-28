@@ -19,7 +19,9 @@ import (
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 
+	"github.com/timeless/backend/internal/integration"
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/repository"
 	"github.com/timeless/backend/internal/security"
 )
 
@@ -59,11 +61,11 @@ type Handlers struct {
 	integrationSync *integrationSyncRunner
 }
 
-func NewHandlers(logger *slog.Logger, db *gorm.DB, cipher *security.CredentialCipher) *Handlers {
+func NewHandlers(logger *slog.Logger, db *gorm.DB, cipher *security.CredentialCipher, syncRunRepo *repository.SyncRunRepository, registryCfg integration.RegistryConfig) *Handlers {
 	return &Handlers{
 		logger:          logger,
 		db:              db,
-		integrationSync: newIntegrationSyncRunner(db, cipher),
+		integrationSync: newIntegrationSyncRunner(db, cipher, syncRunRepo, registryCfg),
 	}
 }
 
