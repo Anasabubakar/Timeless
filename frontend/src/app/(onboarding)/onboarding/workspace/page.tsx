@@ -36,14 +36,14 @@ export default function WorkspaceStepPage() {
   const connectIntegration = useConnectIntegration();
 
   const savedPayload = (onboardingState?.data.payload || {}) as Record<string, string>;
-  const [zapierUrl, setZapierUrl] = useState(savedPayload.zapier_mcp_server_url || "");
+  const [zapierToken, setZapierToken] = useState(savedPayload.zapier_token || "");
   const [nativeValues, setNativeValues] = useState<Record<string, string>>({});
   const [connecting, setConnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (savedPayload.zapier_mcp_server_url) setZapierUrl(savedPayload.zapier_mcp_server_url);
+    if (savedPayload.zapier_token) setZapierToken(savedPayload.zapier_token);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onboardingState?.data.id]);
 
@@ -54,9 +54,9 @@ export default function WorkspaceStepPage() {
     }, 600);
   }
 
-  function handleZapierUrlChange(value: string) {
-    setZapierUrl(value);
-    autosave({ zapier_mcp_server_url: value });
+  function handleZapierTokenChange(value: string) {
+    setZapierToken(value);
+    autosave({ zapier_token: value });
   }
 
   const integrations = integrationsData?.data || [];
@@ -76,7 +76,7 @@ export default function WorkspaceStepPage() {
   }
 
   async function handleContinue() {
-    await saveState.mutateAsync({ step: "discovery", payload: { zapier_mcp_server_url: zapierUrl } });
+    await saveState.mutateAsync({ step: "discovery", payload: { zapier_token: zapierToken } });
     router.push("/onboarding/discovery");
   }
 
@@ -129,20 +129,21 @@ export default function WorkspaceStepPage() {
               ))}
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">MCP Server URL</label>
+              <label className="text-sm font-medium">Connection token</label>
               <Input
-                value={zapierUrl}
-                onChange={(e) => handleZapierUrlChange(e.target.value)}
-                placeholder="https://mcp.zapier.com/api/mcp/s/..."
+                type="password"
+                value={zapierToken}
+                onChange={(e) => handleZapierTokenChange(e.target.value)}
+                placeholder="Paste your Zapier MCP token"
               />
               <p className="text-xs text-muted-foreground">
-                From your Zapier account: MCP → create a server → copy the MCP Server URL.
+                From mcp.zapier.com: open your server → Connect tab → choose &ldquo;Other&rdquo; → Generate token.
               </p>
             </div>
             <Button
               className="w-full"
-              disabled={!zapierUrl || connecting === "zapier"}
-              onClick={() => handleConnect("zapier", { mcp_server_url: zapierUrl })}
+              disabled={!zapierToken || connecting === "zapier"}
+              onClick={() => handleConnect("zapier", { token: zapierToken })}
             >
               {connecting === "zapier" ? "Connecting..." : "Connect Zapier"}
             </Button>
@@ -205,7 +206,7 @@ export default function WorkspaceStepPage() {
         <Button variant="ghost" onClick={handleSkip}>
           Skip for now
         </Button>
-        <Button onClick={handleContinue} disabled={!hasAnyConnection && !zapierUrl}>
+        <Button onClick={handleContinue} disabled={!hasAnyConnection && !zapierToken}>
           Continue
         </Button>
       </div>

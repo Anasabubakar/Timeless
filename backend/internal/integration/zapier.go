@@ -11,11 +11,16 @@ import (
 	"time"
 )
 
-// ZapierClient connects to a user's personal Zapier MCP server
-// (https://mcp.zapier.com), which speaks MCP over the Streamable HTTP
-// transport (JSON-RPC 2.0). The "credential" is the full per-user MCP
-// Server URL Zapier generates, which already embeds the auth secret —
-// there is no separate API key to collect.
+// ZapierClient connects to Zapier MCP (https://mcp.zapier.com), which
+// speaks MCP over the Streamable HTTP transport (JSON-RPC 2.0).
+//
+// Per Zapier's docs (docs.zapier.com/mcp/authenticate-with-zapier-mcp),
+// a custom backend like ours authenticates with a "connection token" or
+// "API key" generated from a server's Connect tab (choose "Other", or
+// "TypeScript"/"Python" for the API key variant) and sent as a Bearer
+// token against the fixed endpoint below — there is no per-user URL to
+// parse. A legacy "mcp_server_url" credential is still honored for users
+// who pasted a listed-client server URL instead.
 type ZapierClient struct {
 	httpClient *http.Client
 }
@@ -26,18 +31,20 @@ func NewZapierClient() *ZapierClient {
 
 func (c *ZapierClient) Provider() string { return "zapier" }
 
-const zapierDefaultMCPURL = "https://mcp.zapier.com/api/mcp/mcp"
+const zapierConnectURL = "https://mcp.zapier.com/api/v1/connect"
 
-// zapierEndpoint resolves how to reach the user's Zapier MCP server: an
-// OAuth access token against the shared endpoint, or a personal MCP Server
-// URL that embeds its own secret.
+// zapierEndpoint resolves how to reach the user's Zapier MCP server.
 func zapierEndpoint(credentials map[string]string) (serverURL, bearer string, err error) {
-	if token := strings.TrimSpace(credentials["access_token"]); token != "" {
-		return zapierDefaultMCPURL, token, nil
+	token := strings.TrimSpace(credentials["token"])
+	if token == "" {
+		token = strings.TrimSpace(credentials["access_token"])
+	}
+	if token != "" {
+		return zapierConnectURL, token, nil
 	}
 	serverURL = strings.TrimSpace(credentials["mcp_server_url"])
 	if serverURL == "" || !strings.HasPrefix(serverURL, "https://") {
-		return "", "", fmt.Errorf("mcp_server_url is required and must be the https MCP Server URL from mcp.zapier.com")
+		return "", "", fmt.Errorf("token is required — generate one from mcp.zapier.com's Connect tab")
 	}
 	return serverURL, "", nil
 }
