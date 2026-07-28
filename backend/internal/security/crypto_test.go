@@ -68,6 +68,17 @@ func TestRotationKeepsOldDataReadable(t *testing.T) {
 	}
 }
 
+func TestCurrentKeyIDMatchesEncryptTag(t *testing.T) {
+	c := NewCredentialCipher("secret-v1")
+	enc, err := c.Encrypt("value")
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+	if got, want := enc[:len(c.CurrentKeyID())], c.CurrentKeyID(); got != want {
+		t.Errorf("Encrypt() output isn't tagged with CurrentKeyID(): got prefix %q, want %q", got, want)
+	}
+}
+
 func TestDecryptUnknownKeyIDFails(t *testing.T) {
 	c := NewCredentialCipher("secret-v2", "secret-v1")
 	otherCipher := NewCredentialCipher("secret-v3-never-registered")
