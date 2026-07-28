@@ -297,3 +297,19 @@ regular customers, and Zapier has no third-party OAuth app registration
 5. Add its provider string to the frontend's `AVAILABLE_PROVIDERS` list
    once it actually has a working client — never add a placeholder entry
    for a provider with no real backend support behind it.
+
+## Testing approach
+
+Pure logic (slug guessing, role matching, state merging, normalization,
+dedupe-key derivation) is covered by ordinary table-driven unit tests with
+no external dependencies. HTTP-facing logic (status-code-to-error-type
+mapping, the event-stream scanner) is covered with `httptest.Server`
+instead of mocks, so the actual `net/http` request/response path is
+exercised — this is what caught the 64KB scanner buffer bug in the first
+place, by re-running the exact same code against a live Zapier MCP server
+before it was caught in a test.
+
+Full end-to-end connect → sync → dashboard flows were also verified
+against live Notion/Apollo/Zapier accounts during development (not just
+unit tests) — see the "Known limitations" section below for what that
+verification could and couldn't cover in a sandboxed environment.
