@@ -170,3 +170,17 @@ revenue, funding, technologies, location) as-is from Apollo — the worker
 merges it directly into `Company.EnrichmentData`. Returns `(nil, nil)` —
 not an error — when Apollo simply has no record for a domain, so "no
 data" is never treated as a sync failure.
+
+## Apollo: role-based contact discovery
+
+`ApolloClient.DiscoverRoleContacts` searches `TargetRoles` (Founder, CEO,
+Co-Founder, CMO, Marketing Director, Head of Partnerships, Partnership
+Manager, Developer Relations, Community Lead, Brand Lead, Country
+Manager, Regional Manager, Events Manager, Communications Lead) against a
+company's domain via `mixed_people/api_search`, and reports exactly one
+`DiscoveredContactRecord` per role — `Available: false` (never a
+fabricated name/email) when nobody matches. Email reveals are
+credit-consuming, so they're capped at `maxEmailRevealsPerCompany` (6) per
+company per run, prioritized in `TargetRoles` order; confidence is derived
+from Apollo's own `email_status` (`verified` → 0.95, `guessed` → 0.4,
+`unverified` → 0.3), never asserted independently of it.
