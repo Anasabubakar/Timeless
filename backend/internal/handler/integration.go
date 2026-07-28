@@ -113,6 +113,22 @@ func (h *IntegrationHandler) Delete(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+// TriggerSync manually enqueues a sync for this integration right now,
+// instead of waiting for the next webhook/scheduled poll.
+func (h *IntegrationHandler) TriggerSync(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	userID := middleware.GetUserID(c)
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+	}
+
+	if err := h.svc.TriggerSync(c.Context(), orgID, userID, id); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	return c.SendStatus(fiber.StatusAccepted)
+}
+
 // Revoke disconnects an integration but keeps its sync history, so the
 // dashboard can still show "revoked 2 days ago" instead of the row just
 // disappearing.

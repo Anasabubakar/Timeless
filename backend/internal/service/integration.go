@@ -55,6 +55,33 @@ func (s *IntegrationService) Delete(ctx context.Context, orgID, id uuid.UUID) er
 	return s.repo.Delete(ctx, orgID, id)
 }
 
+// TriggerSync manually enqueues a sync for an already-connected integration
+// — "sync now" instead of waiting for the next webhook/scheduled poll.
+// Returns an error if credentials were never actually stored (e.g. the
+// integration row exists but was created via the generic CRUD Create
+// rather than a real Connect).
+func (s *IntegrationService) TriggerSync(ctx context.Context, orgID, userID, id uuid.UUID) error {
+	rec, err := s.repo.GetByID(ctx, orgID, id)
+	if err != nil {
+		return err
+	}
+	if len(rec.Credentials) == 0 {
+		return fmt.Errorf("integration has no stored credentials to sync with")
+	}
+	if s.worker == nil {
+		return fmt.Errorf("worker client unavailable")
+	}
+	_, err = s.worker.Enqueue(worker.TaskIntegrationSync, worker.TaskPayload{
+		OrgID:      orgID.String(),
+		UserID:     userID.String(),
+		EntityID:   rec.ID.String(),
+		EntityType: "integration",
+		Action:     rec.Provider,
+		Data:       map[string]interface{}{"trigger": "manual"},
+	})
+	return err
+}
+
 // Revoke disconnects an integration without deleting its history: it wipes
 // the stored credentials immediately (so a leaked DB row exposes nothing)
 // and marks status "revoked" so the dashboard and reconnect flow can tell

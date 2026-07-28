@@ -208,6 +208,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	integrations.Patch("/:id", integrationHandler.Update)
 	integrations.Delete("/:id", integrationHandler.Delete)
 	integrations.Post("/:id/revoke", integrationHandler.Revoke)
+	integrations.Post("/:id/sync", integrationHandler.TriggerSync)
 	integrations.Post("/:provider/connect", integrationHandler.Connect)
 	integrations.Patch("/notion/pages/:pageID", integrationHandler.PushNotionPage)
 	integrations.Post("/rotate-credentials", integrationHandler.RotateCredentials)
