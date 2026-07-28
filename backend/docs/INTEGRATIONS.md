@@ -65,3 +65,20 @@ the credentials map (JSON-marshaled, then AES-256-GCM-sealed) before
 writing to `Integration.Credentials`, and decrypts on the way out — no
 handler or frontend code ever sees a raw token. See
 `internal/security/crypto.go` for the cipher implementation.
+
+## Credential rotation
+
+`CredentialCipher` tags every ciphertext with the id of the key it was
+encrypted under. Rotating `CREDENTIALS_ENCRYPTION_KEY`:
+
+1. Move the current value into `CREDENTIALS_ENCRYPTION_KEY_PREVIOUS`
+   (comma-separated list, oldest first).
+2. Set a new `CREDENTIALS_ENCRYPTION_KEY`.
+3. Redeploy, then call `POST /integrations/rotate-credentials` for each
+   org (or loop over all orgs from an admin script) to re-encrypt every
+   stored credential under the new key. Rows already on the current key
+   are skipped, so the call is safe to repeat.
+
+Skipping step 3 doesn't break anything immediately — `Decrypt` still finds
+the old key in the previous-keys list — but the org stays on a retired key
+until rotation is completed.
