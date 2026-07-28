@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
@@ -52,7 +54,16 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 
 	user, tokens, err := h.svc.Login(c.Context(), input)
 	if err != nil {
-		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+		if errors.Is(err, service.ErrAccountLocked) {
+			return fiber.NewError(fiber.StatusTooManyRequests, err.Error())
+		}
+		if errors.Is(err, service.ErrMFARequired) {
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"mfa_required": true,
+				"user_id":      user.ID,
+			})
+		}
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid credentials")
 	}
 
 	return c.JSON(fiber.Map{

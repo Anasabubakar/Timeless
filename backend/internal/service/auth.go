@@ -219,6 +219,15 @@ func (s *AuthService) ResendVerification(ctx context.Context, emailAddr string) 
 	return nil
 }
 
+// ErrAccountLocked is returned by Login when the account is currently
+// locked out from too many consecutive failed attempts.
+var ErrAccountLocked = errors.New("account is temporarily locked due to too many failed login attempts")
+
+// ErrMFARequired is returned by Login when the password check passed but
+// the account has TOTP enabled — the caller must complete
+// VerifyMFALogin with a code before tokens are issued.
+var ErrMFARequired = errors.New("mfa verification required")
+
 func (s *AuthService) Login(ctx context.Context, input LoginInput) (*models.User, *AuthTokens, error) {
 	user, err := s.userRepo.FindByEmail(ctx, input.Email)
 	if err != nil {
@@ -228,11 +237,16 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*models.User
 		return nil, nil, err
 	}
 
+	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
+		return nil, nil, ErrAccountLocked
+	}
+
 	if user.PasswordHash == nil {
 		return nil, nil, errors.New("invalid credentials")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(input.Password)); err != nil {
+		s.recordFailedLogin(ctx, user)
 		return nil, nil, errors.New("invalid credentials")
 	}
 
@@ -240,6 +254,20 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*models.User
 		return nil, nil, errors.New("account is not active")
 	}
 
+	if user.MFAEnabled {
+		// Password verified but MFA still required: don't reset the
+		// failed-login counter or issue tokens yet. The caller must call
+		// VerifyMFALogin next with a short-lived pending ticket.
+		return user, nil, ErrMFARequired
+	}
+
+	return s.completeLogin(ctx, user)
+}
+
+// completeLogin resets lockout state, updates LastLoginAt, and issues
+// tokens. Split out of Login so VerifyMFALogin can reuse it once the TOTP
+// step passes.
+func (s *AuthService) completeLogin(ctx context.Context, user *models.User) (*models.User, *AuthTokens, error) {
 	tokens, err := s.generateTokens(user)
 	if err != nil {
 		return nil, nil, err
@@ -247,9 +275,26 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*models.User
 
 	now := time.Now()
 	user.LastLoginAt = &now
+	user.FailedLoginCount = 0
+	user.LockedUntil = nil
 	_ = s.userRepo.Update(ctx, user)
 
 	return user, tokens, nil
+}
+
+// recordFailedLogin increments the failure counter and locks the account
+// once it crosses cfg.MaxFailedLogins. Errors updating the counter are
+// logged, not returned — a persistence hiccup here must not turn into
+// "you're locked out forever" nor silently disable lockout.
+func (s *AuthService) recordFailedLogin(ctx context.Context, user *models.User) {
+	user.FailedLoginCount++
+	if user.FailedLoginCount >= s.cfg.MaxFailedLogins {
+		until := time.Now().Add(s.cfg.LoginLockoutDuration)
+		user.LockedUntil = &until
+	}
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		log.Printf("auth: failed to persist failed-login count for user %s: %v", user.ID, err)
+	}
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*AuthTokens, error) {
