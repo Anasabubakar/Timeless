@@ -282,3 +282,18 @@ per-run duration and record counts) instead of just a single
 Apollo and Zapier have no OAuth env vars — Apollo is API-key-only for
 regular customers, and Zapier has no third-party OAuth app registration
 (the user pastes a personal MCP connection token instead).
+
+## Extending: adding a new provider
+
+1. Implement `integration.Client` (and `Refresher` if it has expiring
+   OAuth tokens) in `internal/integration/<provider>.go`.
+2. Register it in `integration.Registry`.
+3. If it needs OAuth, add its client id/secret to `config.Config` and
+   register an `OAuthProvider` entry in `handler.NewOAuthHandler`.
+4. If it needs a webhook receiver, follow the Notion pattern: verify a
+   signature before trusting the payload, route by an `ExternalAccountID`
+   equivalent, and only ever enqueue a job from the handler — never
+   process inline.
+5. Add its provider string to the frontend's `AVAILABLE_PROVIDERS` list
+   once it actually has a working client — never add a placeholder entry
+   for a provider with no real backend support behind it.
