@@ -53,3 +53,14 @@ for the full architecture writeup.
 - A periodic re-sync scheduler as the polling fallback for whatever a
   webhook doesn't cover.
 - Manual "sync now" trigger.
+
+### Added — Data quality & security
+
+- Shared normalization (domain/email/company-name canonicalization) used
+  at every ingestion point.
+- Automatic + on-demand duplicate-company merging, reassigning contacts,
+  decision makers, sponsors, and pain points to the surviving record.
+- Credential encryption key rotation (`CREDENTIALS_ENCRYPTION_KEY` +
+  `_PREVIOUS`, tagged ciphertext, `POST /integrations/rotate-credentials`).
+- `Revoke` (wipe credentials, keep history) as a distinct action from a
+  hard delete.
