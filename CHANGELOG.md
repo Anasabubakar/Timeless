@@ -40,3 +40,16 @@ for the full architecture writeup.
   `Available: false` rather than fabricating data when nobody matches.
 - Corrected the people-search endpoint to `mixed_people/api_search` per
   current docs.
+
+### Added — Reliability & observability
+
+- `sync_runs` history table plus a live dashboard (connection health,
+  recent runs, 24h failure counts, pending jobs).
+- Distinct handling for expired auth (refresh-then-reconnect), rate
+  limits (provider-aware backoff), and deleted integrations (stop
+  retrying) instead of one generic retry path.
+- Stale-run recovery: a crashed worker's stuck "running" rows are reaped
+  and re-enqueued automatically at the next worker startup.
+- A periodic re-sync scheduler as the polling fallback for whatever a
+  webhook doesn't cover.
+- Manual "sync now" trigger.
