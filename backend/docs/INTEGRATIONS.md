@@ -225,3 +225,15 @@ Sync failures aren't all handled the same way:
   can't reappear.
 - Anything else: status → `error`, and asynq's default retry/backoff
   applies.
+
+## Background workers: stale-run recovery
+
+If a worker process is killed mid-sync, the `sync_runs` row it was writing
+to is left stuck at `status: "running"` forever — which would otherwise
+permanently block that integration from ever syncing again, since
+`HasRunning` is the guard against duplicate concurrent syncs.
+`SyncRunRepository.HasRunning` only counts a `running` row younger than
+`staleRunThreshold` (10 minutes); `ReapStaleRuns` marks anything older as
+`failed`, and `worker.RecoverStaleSyncs` (run once at worker startup)
+calls it and re-enqueues a fresh sync for whatever integration was left
+stuck — recovery without a human needing to notice.
