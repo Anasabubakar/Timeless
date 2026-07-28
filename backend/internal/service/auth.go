@@ -257,11 +257,51 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*models.User
 	if user.MFAEnabled {
 		// Password verified but MFA still required: don't reset the
 		// failed-login counter or issue tokens yet. The caller must call
-		// VerifyMFALogin next with a short-lived pending ticket.
+		// VerifyMFALogin next with a short-lived pending ticket, which
+		// itself is proof the password step already passed — a code
+		// alone is never sufficient to complete login.
 		return user, nil, ErrMFARequired
 	}
 
 	return s.completeLogin(ctx, user)
+}
+
+// mfaPendingTTL bounds how long a password-verified-but-not-yet-MFA'd
+// login attempt stays valid, limiting the window an intercepted ticket
+// could be replayed in.
+const mfaPendingTTL = 5 * time.Minute
+
+// IssueMFAPendingTicket mints a short-lived, purpose-scoped JWT proving
+// the password step of login already succeeded for this user. Handed to
+// the client instead of a raw user ID so completing MFA can't be done by
+// anyone who merely knows (or guesses) a user ID.
+func (s *AuthService) IssueMFAPendingTicket(user *models.User) (string, error) {
+	claims := jwt.MapClaims{
+		"sub":  user.ID.String(),
+		"type": "mfa_pending",
+		"iat":  time.Now().Unix(),
+		"exp":  time.Now().Add(mfaPendingTTL).Unix(),
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return tok.SignedString([]byte(s.cfg.JWTSecret))
+}
+
+func (s *AuthService) parseMFAPendingTicket(ticket string) (uuid.UUID, error) {
+	tok, err := jwt.Parse(ticket, func(t *jwt.Token) (interface{}, error) {
+		return []byte(s.cfg.JWTSecret), nil
+	})
+	if err != nil || !tok.Valid {
+		return uuid.Nil, errors.New("invalid or expired mfa ticket")
+	}
+	claims, ok := tok.Claims.(jwt.MapClaims)
+	if !ok || claims["type"] != "mfa_pending" {
+		return uuid.Nil, errors.New("invalid or expired mfa ticket")
+	}
+	userID, err := uuid.Parse(claims["sub"].(string))
+	if err != nil {
+		return uuid.Nil, errors.New("invalid or expired mfa ticket")
+	}
+	return userID, nil
 }
 
 // completeLogin resets lockout state, updates LastLoginAt, and issues
