@@ -28,6 +28,7 @@ import {
   useConnectIntegration,
   useRotateCredentials,
   useDedupeCompanies,
+  useTriggerSync,
   type Integration,
   type DashboardEntry,
 } from "@/queries/integrations";
@@ -394,6 +395,7 @@ function ManageIntegrationDialog({
   const deleteIntegration = useDeleteIntegration();
   const revokeIntegration = useRevokeIntegration();
   const connectIntegration = useConnectIntegration();
+  const triggerSync = useTriggerSync();
   const [confirming, setConfirming] = useState(false);
   const { data: zapierApps } = useZapierApps(integration.provider === "zapier" && integration.status === "active");
 
@@ -415,6 +417,13 @@ function ManageIntegrationDialog({
       { provider: integration.provider, credentials: {} },
       { onSuccess: () => onOpenChange(false) }
     );
+  };
+
+  const handleSyncNow = () => {
+    triggerSync.mutate(integration.id, {
+      onSuccess: () => toast.success(`${integration.name} sync started`),
+      onError: () => toast.error(`Could not start ${integration.name} sync`),
+    });
   };
 
   const status = STATUS_CONFIG[integration.status] ?? STATUS_CONFIG.inactive;
@@ -502,6 +511,16 @@ function ManageIntegrationDialog({
               >
                 <RefreshCw className="h-4 w-4" />
                 Reconnect
+              </button>
+            )}
+            {integration.status === "active" && (
+              <button
+                onClick={handleSyncNow}
+                disabled={triggerSync.isPending}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted transition-colors"
+              >
+                <RefreshCw className="h-4 w-4" />
+                {triggerSync.isPending ? "Starting sync…" : "Sync now"}
               </button>
             )}
             <button
