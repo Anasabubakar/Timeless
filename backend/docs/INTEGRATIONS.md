@@ -121,3 +121,13 @@ decide whether it looks like a contacts table (a title property plus an
 email/company-like column) and maps rows into `ContactRecord` accordingly,
 falling back to `NoteRecord` for anything else so nothing is silently
 dropped.
+
+## Notion: incremental sync via watermark
+
+`discoverAll` stops paginating as soon as it crosses the stored watermark
+(the newest `last_edited_time` seen on the previous run) — a steady-state
+re-sync only reads what actually changed instead of re-walking the entire
+workspace. The watermark round-trips through `SyncResult.State` and
+`Integration.Config` (see `mergeConfig`/`extractState` in the worker
+package), not through any Notion-side cursor, since Notion's search API
+doesn't expose one.
