@@ -43,3 +43,9 @@ func TestCompanyNameSameKeyForVariants(t *testing.T) {
 		t.Errorf("expected Acme Inc. and Acme to normalize to the same key")
 	}
 }
+
+func TestPersonName(t *testing.T) {
+	if got := PersonName("  Jane   Doe  "); got != "Jane Doe" {
+		t.Errorf("PersonName() = %q, want %q", got, "Jane Doe")
+	}
+}
