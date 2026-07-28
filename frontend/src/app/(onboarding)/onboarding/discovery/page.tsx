@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import RotatingText from "@/components/ui/rotating-text";
 import { useRunDiscovery, useSelectProjects, type DiscoveredProject } from "@/queries/discovery";
 import { useSaveOnboardingState } from "@/queries/onboarding";
+import { useReducedMotion } from "@/hooks/use-media-query";
 
 export default function DiscoveryStepPage() {
   const router = useRouter();
+  const prefersReducedMotion = useReducedMotion();
   const runDiscovery = useRunDiscovery();
   const selectProjects = useSelectProjects();
   const saveState = useSaveOnboardingState();
@@ -59,7 +62,18 @@ export default function DiscoveryStepPage() {
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h1 className="text-2xl font-semibold">What would you like Timeless to focus on?</h1>
+        {prefersReducedMotion ? (
+          <h1 className="text-2xl font-semibold">What would you like Timeless to focus on?</h1>
+        ) : (
+          <RotatingText
+            texts={["What would you like Timeless to focus on?"]}
+            auto={false}
+            splitBy="words"
+            staggerDuration={0.03}
+            mainClassName="justify-center text-2xl font-semibold"
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          />
+        )}
         <p className="mt-2 text-sm text-muted-foreground">
           I inspected your connected data and inferred what you might be working on.
         </p>
