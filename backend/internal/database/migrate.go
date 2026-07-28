@@ -30,6 +30,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Role{},
 		&models.OAuthAccount{},
 		&models.RefreshToken{},
+		&models.EmailVerificationToken{},
+		&models.PasswordResetToken{},
 		&models.Team{},
 		&models.TeamMember{},
 		&models.Industry{},
