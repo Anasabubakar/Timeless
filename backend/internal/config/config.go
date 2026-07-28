@@ -18,6 +18,23 @@ type Config struct {
 	JWTSecret     string        `env:"JWT_SECRET,required"`
 	JWTExpiry     time.Duration `env:"JWT_EXPIRY" envDefault:"24h"`
 	RefreshExpiry time.Duration `env:"REFRESH_EXPIRY" envDefault:"720h"`
+	// RememberMeExpiry is used instead of RefreshExpiry when the client
+	// opts into "remember me" at login; RefreshExpiry alone doubles as the
+	// non-remembered session length so existing behavior is unchanged.
+	RememberMeExpiry time.Duration `env:"REMEMBER_ME_EXPIRY" envDefault:"2160h"` // 90 days
+
+	EmailVerificationTTL time.Duration `env:"EMAIL_VERIFICATION_TTL" envDefault:"24h"`
+	PasswordResetTTL     time.Duration `env:"PASSWORD_RESET_TTL" envDefault:"1h"`
+
+	// Brute-force lockout: after MaxFailedLogins consecutive failures the
+	// account is locked for LoginLockoutDuration. Counter resets on any
+	// successful login.
+	MaxFailedLogins      int           `env:"MAX_FAILED_LOGINS" envDefault:"5"`
+	LoginLockoutDuration time.Duration `env:"LOGIN_LOCKOUT_DURATION" envDefault:"15m"`
+
+	// MFAIssuer is the "issuer" label shown in authenticator apps
+	// (Google Authenticator, 1Password, etc.) when a user enrolls TOTP.
+	MFAIssuer string `env:"MFA_ISSUER" envDefault:"Timeless"`
 
 	// CredentialsEncryptionKey is the secret integration credentials
 	// (OAuth tokens, API keys) are encrypted with at rest. Defaults to
