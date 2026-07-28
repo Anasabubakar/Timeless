@@ -291,7 +291,7 @@ func (c *ZapierClient) callTool(ctx context.Context, serverURL, bearer, name str
 	})
 }
 
-func (c *ZapierClient) Sync(ctx context.Context, credentials map[string]string) (*SyncResult, error) {
+func (c *ZapierClient) Sync(ctx context.Context, credentials map[string]string, _ map[string]interface{}) (*SyncResult, error) {
 	serverURL, bearer, err := zapierEndpoint(credentials)
 	if err != nil {
 		return nil, err
