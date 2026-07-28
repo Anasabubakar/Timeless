@@ -10,6 +10,7 @@ import { useDashboardStats } from '@/queries/analytics';
 import { useIntegrations } from '@/queries/integrations';
 import { useReducedMotion } from '@/hooks/use-media-query';
 import { Logo } from '@/components/brand/logo';
+import RotatingText from '@/components/ui/rotating-text';
 import ReactMarkdown from 'react-markdown';
 
 interface Message {
@@ -41,6 +42,8 @@ export function AIAssistant() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [greetingId, setGreetingId] = useState<string | null>(null);
+  const [greetingVariants, setGreetingVariants] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const aiQuery = useAIQuery();
   const { data: statsData } = useDashboardStats();
@@ -68,16 +71,30 @@ export function AIAssistant() {
       parts.push(`${activeIntegrations} connected ${activeIntegrations === 1 ? 'integration' : 'integrations'}`);
     }
 
-    const summary =
-      stats.total_companies + stats.total_contacts + stats.total_sponsors === 0
-        ? "I haven't found much in your workspace yet — connect an integration or ask me to start researching."
-        : `I found ${parts.join(', ')}. Here's what I can help with today.`;
+    const greeting = greetingForTimeOfDay();
+    const isEmpty = stats.total_companies + stats.total_contacts + stats.total_sponsors === 0;
 
+    const variants = isEmpty
+      ? [
+          `${greeting}. I haven't found much in your workspace yet — connect an integration or ask me to start researching.`,
+        ]
+      : [
+          `${greeting}. I found ${parts.join(', ')}. Here's what I can help with today.`,
+          `${greeting}. Your workspace has ${stats.total_companies} ${
+            stats.total_companies === 1 ? 'company' : 'companies'
+          } and ${stats.total_sponsors} active ${
+            stats.total_sponsors === 1 ? 'sponsor' : 'sponsors'
+          } in play — want me to suggest today's priorities?`,
+        ];
+
+    const id = crypto.randomUUID();
+    setGreetingId(id);
+    setGreetingVariants(variants);
     setMessages([
       {
-        id: crypto.randomUUID(),
+        id,
         role: 'assistant',
-        content: `${greetingForTimeOfDay()}. ${summary}`,
+        content: variants[0],
         timestamp: new Date(),
       },
     ]);
@@ -190,9 +207,21 @@ export function AIAssistant() {
                         {msg.agent}
                       </Badge>
                     )}
-                    <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    </div>
+                    {msg.id === greetingId && messages.length === 1 && greetingVariants.length > 1 ? (
+                      <RotatingText
+                        texts={greetingVariants}
+                        auto={!prefersReducedMotion}
+                        rotationInterval={6000}
+                        staggerDuration={0.015}
+                        splitBy="words"
+                        mainClassName="text-sm text-neutral-800 dark:text-neutral-100"
+                        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                      />
+                    ) : (
+                      <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
