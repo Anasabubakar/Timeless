@@ -45,6 +45,12 @@ func newIntegrationSyncRunner(db *gorm.DB, cipher *security.CredentialCipher, sy
 func (r *integrationSyncRunner) run(ctx context.Context, integrationID, trigger string) error {
 	var rec models.Integration
 	if err := r.db.WithContext(ctx).Where("id = ?", integrationID).First(&rec).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// The integration was deleted after this job was enqueued (e.g. a
+			// scheduled resync raced a user disconnecting it) — retrying
+			// won't make the record reappear.
+			return fmt.Errorf("integration no longer exists: %w", asynq.SkipRetry)
+		}
 		return fmt.Errorf("find integration: %w", err)
 	}
 
