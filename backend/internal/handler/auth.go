@@ -89,6 +89,35 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "logged out"})
 }
 
+func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := c.Bind().JSON(&body); err != nil || body.Token == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "token is required")
+	}
+
+	if err := h.svc.VerifyEmail(c.Context(), body.Token); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "email verified"})
+}
+
+func (h *AuthHandler) ResendVerification(c fiber.Ctx) error {
+	var body struct {
+		Email string `json:"email"`
+	}
+	if err := c.Bind().JSON(&body); err != nil || body.Email == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "email is required")
+	}
+
+	_ = h.svc.ResendVerification(c.Context(), body.Email)
+	// Always a generic success response — do not reveal whether the
+	// address exists or is already verified.
+	return c.JSON(fiber.Map{"message": "if that address needs verification, an email has been sent"})
+}
+
 func (h *AuthHandler) Me(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {
