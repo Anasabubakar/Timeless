@@ -73,6 +73,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	auth.Post("/resend-verification", authHandler.ResendVerification)
 	auth.Post("/forgot-password", authHandler.ForgotPassword)
 	auth.Post("/reset-password", authHandler.ResetPassword)
+	auth.Post("/mfa/verify-login", authHandler.VerifyMFALogin)
 
 	// Protected routes
 	auditMw := middleware.AuditLog(middleware.AuditConfig{DB: db})
@@ -81,6 +82,9 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	// Auth (protected)
 	protected.Post("/auth/logout", authHandler.Logout)
 	protected.Get("/auth/me", authHandler.Me)
+	protected.Post("/auth/mfa/enroll", authHandler.EnrollMFA)
+	protected.Post("/auth/mfa/confirm", authHandler.ConfirmMFA)
+	protected.Post("/auth/mfa/disable", authHandler.DisableMFA)
 
 	// Organizations
 	orgHandler := handler.NewOrganizationHandler(service.NewOrganizationService(orgRepo))

@@ -58,9 +58,13 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 			return fiber.NewError(fiber.StatusTooManyRequests, err.Error())
 		}
 		if errors.Is(err, service.ErrMFARequired) {
+			ticket, ticketErr := h.svc.IssueMFAPendingTicket(user)
+			if ticketErr != nil {
+				return fiber.NewError(fiber.StatusInternalServerError, "failed to start mfa verification")
+			}
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
 				"mfa_required": true,
-				"user_id":      user.ID,
+				"mfa_ticket":   ticket,
 			})
 		}
 		return fiber.NewError(fiber.StatusUnauthorized, "invalid credentials")
@@ -155,6 +159,77 @@ func (h *AuthHandler) ResendVerification(c fiber.Ctx) error {
 	// Always a generic success response — do not reveal whether the
 	// address exists or is already verified.
 	return c.JSON(fiber.Map{"message": "if that address needs verification, an email has been sent"})
+}
+
+func (h *AuthHandler) VerifyMFALogin(c fiber.Ctx) error {
+	var body struct {
+		Ticket string `json:"mfa_ticket"`
+		Code   string `json:"code"`
+	}
+	if err := c.Bind().JSON(&body); err != nil || body.Ticket == "" || body.Code == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "mfa_ticket and code are required")
+	}
+
+	user, tokens, err := h.svc.VerifyMFALogin(c.Context(), body.Ticket, body.Code)
+	if err != nil {
+		if errors.Is(err, service.ErrAccountLocked) {
+			return fiber.NewError(fiber.StatusTooManyRequests, err.Error())
+		}
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid verification code")
+	}
+
+	return c.JSON(fiber.Map{"user": user, "tokens": tokens})
+}
+
+func (h *AuthHandler) EnrollMFA(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == uuid.Nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+	}
+
+	enrollment, err := h.svc.EnrollMFA(c.Context(), userID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(enrollment)
+}
+
+func (h *AuthHandler) ConfirmMFA(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == uuid.Nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+	}
+
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := c.Bind().JSON(&body); err != nil || body.Code == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "code is required")
+	}
+
+	if err := h.svc.ConfirmMFA(c.Context(), userID, body.Code); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	return c.JSON(fiber.Map{"message": "mfa enabled"})
+}
+
+func (h *AuthHandler) DisableMFA(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == uuid.Nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+	}
+
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := c.Bind().JSON(&body); err != nil || body.Password == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "password is required")
+	}
+
+	if err := h.svc.DisableMFA(c.Context(), userID, body.Password); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	return c.JSON(fiber.Map{"message": "mfa disabled"})
 }
 
 func (h *AuthHandler) Me(c fiber.Ctx) error {
