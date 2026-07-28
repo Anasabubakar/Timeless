@@ -54,6 +54,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Integration{},
 		&models.Webhook{},
 		&models.WebhookDelivery{},
+		&models.SyncRun{},
 		&models.Automation{},
 		&models.Notification{},
 		&models.NotificationPreference{},
