@@ -377,3 +377,8 @@ verification could and couldn't cover in a sandboxed environment.
   document a tool-naming convention, so `appSlugFromAction` guesses at
   app boundaries from name prefixes. Agentic mode (when a user's server
   has it enabled) avoids this by returning real structured data instead.
+
+---
+
+See [CHANGELOG.md](../../CHANGELOG.md) at the repo root for what shipped
+in the session that produced this document.
