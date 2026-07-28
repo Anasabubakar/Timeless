@@ -150,3 +150,14 @@ doesn't expose one.
    `Integration.ExternalAccountID`, populated at connect time) and
    dispatched as an incremental sync job — the HTTP handler itself does no
    processing, so a burst of Notion activity can't make the endpoint slow.
+
+## Notion: conflict-safe write-back
+
+`NotionClient.UpdatePageProperties` re-reads a page's current
+`last_edited_time` immediately before writing. If it's newer than the
+`expectedLastEditedTime` the caller last read, the write is refused with
+`ConflictError` rather than silently overwriting — the concrete mechanism
+behind "never overwrite newer data with stale data." Exposed via
+`PATCH /integrations/notion/pages/:pageID`, which maps a conflict to HTTP
+409 so the frontend can show a specific "this changed in Notion" message
+instead of a generic failure.
