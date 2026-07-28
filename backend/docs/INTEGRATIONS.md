@@ -13,6 +13,33 @@ get native clients because they're core to the product (workspace content
 sync, prospecting data) and benefit from deeper, provider-specific
 integration than a generic MCP action call can offer.
 
+## Contents
+
+- [Client interface](#client-interface)
+- [OAuth flow (Notion)](#oauth-flow-notion)
+- [Credential storage & encryption](#credential-storage--encryption)
+- [Credential rotation](#credential-rotation)
+- [Zapier: agentic vs. classic mode](#zapier-agentic-vs-classic-mode)
+- [Zapier: safe read-only sync policy](#zapier-safe-read-only-sync-policy)
+- [Notion: schema/database discovery](#notion-schemadatabase-discovery)
+- [Notion: incremental sync via watermark](#notion-incremental-sync-via-watermark)
+- [Notion: webhooks](#notion-webhooks)
+- [Notion: conflict-safe write-back](#notion-conflict-safe-write-back)
+- [Apollo: organization enrichment](#apollo-organization-enrichment)
+- [Apollo: role-based contact discovery](#apollo-role-based-contact-discovery)
+- [Data quality: normalization](#data-quality-normalization)
+- [Data quality: dedupe/merge](#data-quality-dedupemerge)
+- [Background workers: retry/backoff](#background-workers-retrybackoff)
+- [Background workers: stale-run recovery](#background-workers-stale-run-recovery)
+- [Background workers: periodic re-sync scheduler](#background-workers-periodic-re-sync-scheduler)
+- [Observability: sync_runs table](#observability-sync_runs-table)
+- [Observability: API endpoints](#observability-api-endpoints)
+- [Environment variables](#environment-variables)
+- [Extending: adding a new provider](#extending-adding-a-new-provider)
+- [Testing approach](#testing-approach)
+- [Troubleshooting](#troubleshooting)
+- [Known limitations](#known-limitations)
+
 ## Client interface
 
 Every provider implements `integration.Client` (`internal/integration/client.go`):
