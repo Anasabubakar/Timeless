@@ -89,6 +89,34 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "logged out"})
 }
 
+func (h *AuthHandler) ForgotPassword(c fiber.Ctx) error {
+	var body struct {
+		Email string `json:"email"`
+	}
+	if err := c.Bind().JSON(&body); err != nil || body.Email == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "email is required")
+	}
+
+	_ = h.svc.ForgotPassword(c.Context(), body.Email, c.IP())
+	return c.JSON(fiber.Map{"message": "if that address has an account, a reset email has been sent"})
+}
+
+func (h *AuthHandler) ResetPassword(c fiber.Ctx) error {
+	var body struct {
+		Token       string `json:"token"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := c.Bind().JSON(&body); err != nil || body.Token == "" || body.NewPassword == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "token and new_password are required")
+	}
+
+	if err := h.svc.ResetPassword(c.Context(), body.Token, body.NewPassword); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "password reset — all sessions have been signed out"})
+}
+
 func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 	var body struct {
 		Token string `json:"token"`

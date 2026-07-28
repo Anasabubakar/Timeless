@@ -71,6 +71,8 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	auth.Post("/refresh", authHandler.RefreshToken)
 	auth.Post("/verify-email", authHandler.VerifyEmail)
 	auth.Post("/resend-verification", authHandler.ResendVerification)
+	auth.Post("/forgot-password", authHandler.ForgotPassword)
+	auth.Post("/reset-password", authHandler.ResetPassword)
 
 	// Protected routes
 	auditMw := middleware.AuditLog(middleware.AuditConfig{DB: db})
