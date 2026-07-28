@@ -39,3 +39,21 @@ type Refresher interface {
     Refresh(ctx context.Context, credentials map[string]string) (map[string]string, error)
 }
 ```
+
+## OAuth flow (Notion)
+
+Notion is the only provider with a real customer-facing OAuth app (Apollo
+and Zapier don't offer OAuth to regular API-key customers — see their
+sections below). The flow:
+
+1. `GET /integrations/notion/oauth/start?token=<jwt>` — the frontend can't
+   attach an Authorization header to a top-level browser navigation, so the
+   session JWT is passed as a query param instead. A random `state` value
+   is minted and stored in Redis for 10 minutes, keyed to the org/user.
+2. Notion redirects to `GET /integrations/oauth/callback?code=...&state=...`.
+   The state is looked up (and deleted) from Redis, the code is exchanged
+   for a token via HTTP Basic auth against `POST /v1/oauth/token`, and the
+   resulting credentials are handed to `IntegrationService.Connect`.
+3. Notion's token response includes `access_token`, `refresh_token`,
+   `workspace_id`, `workspace_name`, `workspace_icon`, and `bot_id` — all of
+   which are preserved in the encrypted credentials blob.
