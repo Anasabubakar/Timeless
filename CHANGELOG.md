@@ -64,3 +64,15 @@ for the full architecture writeup.
   `_PREVIOUS`, tagged ciphertext, `POST /integrations/rotate-credentials`).
 - `Revoke` (wipe credentials, keep history) as a distinct action from a
   hard delete.
+
+### Fixed
+
+- Zapier MCP responses over bufio.Scanner's 64KB default token size
+  failed every sync with "token too long" — caught against a live server
+  with 119 connected apps / 310 actions.
+- A killed/restarted worker process left `sync_runs` permanently stuck at
+  `running`, wedging that integration's syncs forever.
+- A sync task for a since-deleted integration retried indefinitely.
+- The onboarding "Connect workspace" step persisted a pasted Zapier token
+  in plaintext into `onboarding_states.payload`, separately from (and
+  bypassing the encryption of) the real connect flow.
