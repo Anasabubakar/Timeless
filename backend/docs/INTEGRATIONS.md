@@ -98,3 +98,14 @@ A user's Zapier MCP server (`mcp.zapier.com`) runs in one of two modes:
 `ZapierClient.DiscoverApps` tries agentic mode first and falls back to
 classic-mode grouping automatically; `SyncResult.Details["mode"]` records
 which one was actually used.
+
+## Zapier: safe read-only sync policy
+
+A sync pass never blindly invokes every discovered tool — some Zapier
+actions send emails, post messages, or delete data. `isSafeReadOnlyTool`
+only allows a tool to be auto-invoked during sync if its name matches a
+read verb (`list_`, `search_`, `get_`, `find_`, `fetch_`), doesn't contain
+a write verb (`send`, `create`, `delete`, `update`, `post`, ...), and has
+zero required input arguments. Anything else is left alone — it's only
+ever invoked explicitly via `ExecuteAction` when a calling service
+deliberately wants that specific action.
