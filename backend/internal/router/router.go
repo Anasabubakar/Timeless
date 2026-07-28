@@ -193,15 +193,19 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// Integrations
 	integrationRepo := repository.NewIntegrationRepository(db)
+	syncRunRepo := repository.NewSyncRunRepository(db)
 	credentialCipher := security.NewCredentialCipher(cfg.JWTSecret)
-	integrationSvc := service.NewIntegrationService(integrationRepo, credentialCipher, workerClient)
+	integrationSvc := service.NewIntegrationService(integrationRepo, syncRunRepo, credentialCipher, workerClient)
 	integrationHandler := handler.NewIntegrationHandler(integrationSvc)
 	integrations := protected.Group("/integrations")
 	integrations.Get("/", integrationHandler.List)
+	integrations.Get("/dashboard", integrationHandler.Dashboard)
+	integrations.Get("/zapier/apps", integrationHandler.ZapierApps)
 	integrations.Post("/", integrationHandler.Create)
 	integrations.Get("/:id", integrationHandler.Get)
 	integrations.Patch("/:id", integrationHandler.Update)
 	integrations.Delete("/:id", integrationHandler.Delete)
+	integrations.Post("/:id/revoke", integrationHandler.Revoke)
 	integrations.Post("/:provider/connect", integrationHandler.Connect)
 
 	// OAuth (public: browser redirects can't carry auth headers)

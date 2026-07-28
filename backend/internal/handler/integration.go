@@ -109,3 +109,41 @@ func (h *IntegrationHandler) Delete(c fiber.Ctx) error {
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+// Revoke disconnects an integration but keeps its sync history, so the
+// dashboard can still show "revoked 2 days ago" instead of the row just
+// disappearing.
+func (h *IntegrationHandler) Revoke(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+	}
+
+	if err := h.svc.Revoke(c.Context(), orgID, id); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to revoke integration")
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// Dashboard returns connection health, sync history, and job status for
+// every integration in the org.
+func (h *IntegrationHandler) Dashboard(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	entries, err := h.svc.Dashboard(c.Context(), orgID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to load integration dashboard")
+	}
+	return c.JSON(fiber.Map{"data": entries})
+}
+
+// ZapierApps returns the third-party apps discovered through the org's
+// Zapier connection.
+func (h *IntegrationHandler) ZapierApps(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	apps, agentic, err := h.svc.DiscoverConnectedApps(c.Context(), orgID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	return c.JSON(fiber.Map{"data": apps, "agentic_mode": agentic})
+}
