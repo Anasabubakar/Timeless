@@ -96,3 +96,12 @@ entity edit; inbound "Webhooks by Zapier" (Catch Hook) receiving isn't
 built, only the MCP consumption path; Zapier's classic-mode app grouping
 is a documented heuristic, not a Zapier-guaranteed contract. Full detail
 in backend/docs/INTEGRATIONS.md.
+
+### Deployment notes
+
+No manual database migration is required — `AutoMigrate` (run on every
+boot) creates the new `sync_runs` table and `integrations.external_account_id`
+column automatically. Restart both the API server and the worker process
+to pick up the new code; existing connected integrations keep working
+unchanged (their next sync just gains history tracking and the new
+retry/recovery behavior).
