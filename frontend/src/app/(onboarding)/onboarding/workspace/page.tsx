@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import RotatingText from "@/components/ui/rotating-text";
 import { useIntegrations, useConnectIntegration } from "@/queries/integrations";
 import { useOnboardingState, useSaveOnboardingState } from "@/queries/onboarding";
 import { useAuthStore } from "@/stores/auth";
+import { useReducedMotion } from "@/hooks/use-media-query";
 
 const ZAPIER_APPS = [
   "Notion", "Gmail", "Google Calendar", "Google Meet", "Google Tasks", "Google Drive",
@@ -30,6 +32,7 @@ function startOAuth(provider: string) {
 
 export default function WorkspaceStepPage() {
   const router = useRouter();
+  const prefersReducedMotion = useReducedMotion();
   const { data: onboardingState } = useOnboardingState();
   const saveState = useSaveOnboardingState();
   const { data: integrationsData, refetch: refetchIntegrations } = useIntegrations();
@@ -91,7 +94,18 @@ export default function WorkspaceStepPage() {
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h1 className="text-2xl font-semibold">Connect your workspace</h1>
+        {prefersReducedMotion ? (
+          <h1 className="text-2xl font-semibold">Connect your workspace</h1>
+        ) : (
+          <RotatingText
+            texts={["Connect your workspace"]}
+            auto={false}
+            splitBy="words"
+            staggerDuration={0.03}
+            mainClassName="justify-center text-2xl font-semibold"
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          />
+        )}
         <p className="mt-2 text-sm text-muted-foreground">
           Connect Zapier once to unlock all your apps. Timeless syncs the moment you connect.
         </p>
