@@ -313,3 +313,21 @@ Full end-to-end connect → sync → dashboard flows were also verified
 against live Notion/Apollo/Zapier accounts during development (not just
 unit tests) — see the "Known limitations" section below for what that
 verification could and couldn't cover in a sandboxed environment.
+
+## Troubleshooting
+
+- **"oauth_not_configured" on connect**: `NOTION_CLIENT_ID`/`_SECRET` (or
+  equivalent) aren't set — the frontend surfaces this specific error
+  rather than a generic failure so it's clear which env var is missing.
+- **Integration stuck on "Syncing..." indefinitely**: check
+  `GET /integrations/dashboard` for the integration's `recent_runs` — a
+  `failed` run with a real error message will be there. If the worker
+  process was killed mid-sync, `RecoverStaleSyncs` fixes this
+  automatically the next time the worker starts (within
+  `staleRunThreshold`, 10 minutes).
+- **"reconnect required" / status `expired`**: the stored token was
+  rejected as expired/revoked and (if the provider supports it) a refresh
+  attempt also failed — the user needs to go through Connect again.
+- **Rate limited**: status shows `retrying`; the sync_run's `error` field
+  contains the provider's own Retry-After value, and the worker will
+  retry at that exact time without any manual action needed.
