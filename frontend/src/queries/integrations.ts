@@ -16,13 +16,40 @@ export interface Integration {
   created_at: string;
 }
 
+export interface SyncRun {
+  id: string;
+  integration_id: string;
+  provider: string;
+  trigger: string;
+  status: string;
+  started_at: string;
+  finished_at?: string;
+  duration_ms?: number;
+  records_synced: number;
+  warnings: string[];
+  error?: string;
+  attempt: number;
+}
+
+export interface DashboardEntry {
+  integration: Integration;
+  recent_runs: SyncRun[];
+  failed_runs_24h: number;
+  pending_jobs: number;
+}
+
+export interface ConnectedApp {
+  slug: string;
+  actions: string[];
+}
+
 export function useIntegrations() {
   return useQuery({
     queryKey: ["integrations"],
     queryFn: () => api.get<{ data: Integration[] }>("/integrations"),
     refetchInterval: (query) => {
       const integrations = query.state.data?.data ?? [];
-      return integrations.some((i) => i.status === "syncing") ? 3000 : false;
+      return integrations.some((i) => i.status === "syncing" || i.status === "retrying") ? 3000 : false;
     },
   });
 }
@@ -32,6 +59,23 @@ export function useIntegration(id: string) {
     queryKey: ["integrations", id],
     queryFn: () => api.get<{ data: Integration }>(`/integrations/${id}`),
     enabled: !!id,
+  });
+}
+
+export function useIntegrationDashboard() {
+  return useQuery({
+    queryKey: ["integrations", "dashboard"],
+    queryFn: () => api.get<{ data: DashboardEntry[] }>("/integrations/dashboard"),
+    refetchInterval: 5000,
+  });
+}
+
+export function useZapierApps(enabled: boolean) {
+  return useQuery({
+    queryKey: ["integrations", "zapier", "apps"],
+    queryFn: () => api.get<{ data: ConnectedApp[]; agentic_mode: boolean }>("/integrations/zapier/apps"),
+    enabled,
+    retry: false,
   });
 }
 
@@ -68,6 +112,16 @@ export function useDeleteIntegration() {
   });
 }
 
+export function useRevokeIntegration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/integrations/${id}/revoke`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["integrations"] });
+    },
+  });
+}
+
 export function useConnectIntegration() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -76,5 +130,17 @@ export function useConnectIntegration() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["integrations"] });
     },
+  });
+}
+
+export function useRotateCredentials() {
+  return useMutation({
+    mutationFn: () => api.post<{ data: { checked: number; rotated: number } }>("/integrations/rotate-credentials", {}),
+  });
+}
+
+export function useDedupeCompanies() {
+  return useMutation({
+    mutationFn: () => api.post<{ data: { groups_found: number; companies_merged: number } }>("/companies/dedupe", {}),
   });
 }
