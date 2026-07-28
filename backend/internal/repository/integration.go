@@ -41,6 +41,18 @@ func (r *IntegrationRepository) GetByProvider(ctx context.Context, orgID uuid.UU
 	return &integration, nil
 }
 
+// GetByExternalAccountID finds the integration a provider's webhook event
+// belongs to when all we have is its own account/workspace id — there's no
+// org context on an inbound webhook request otherwise.
+func (r *IntegrationRepository) GetByExternalAccountID(ctx context.Context, provider, externalAccountID string) (*models.Integration, error) {
+	var integration models.Integration
+	err := r.db.WithContext(ctx).Where("provider = ? AND external_account_id = ?", provider, externalAccountID).First(&integration).Error
+	if err != nil {
+		return nil, err
+	}
+	return &integration, nil
+}
+
 func (r *IntegrationRepository) Create(ctx context.Context, integration *models.Integration) error {
 	return r.db.WithContext(ctx).Create(integration).Error
 }

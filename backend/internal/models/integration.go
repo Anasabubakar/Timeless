@@ -21,6 +21,12 @@ type Integration struct {
 	WebhookURL     *string        `gorm:"type:text" json:"webhook_url,omitempty"`
 	WebhookSecret  *string        `gorm:"type:text" json:"-"`
 	InstalledBy    *uuid.UUID     `gorm:"type:uuid" json:"installed_by,omitempty"`
+	// ExternalAccountID is the provider's own account/workspace id (e.g.
+	// Notion's workspace_id). It's not a secret, so it's stored in the
+	// clear (unlike Credentials) specifically so inbound webhook events —
+	// which identify the workspace but carry no org context of ours — can
+	// be routed back to the right Integration row.
+	ExternalAccountID *string `gorm:"size:255;index" json:"external_account_id,omitempty"`
 
 	Organization Organization `gorm:"foreignKey:OrganizationID" json:"-"`
 }
