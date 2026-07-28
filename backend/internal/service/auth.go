@@ -294,6 +294,85 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*A
 	return s.generateTokens(user)
 }
 
+// ForgotPassword issues a password-reset token and emails it. Always
+// returns nil (like ResendVerification) to avoid revealing whether the
+// address has an account.
+func (s *AuthService) ForgotPassword(ctx context.Context, emailAddr, requestIP string) error {
+	user, err := s.userRepo.FindByEmail(ctx, emailAddr)
+	if err != nil {
+		return nil
+	}
+
+	_ = s.resetRepo.InvalidateAllForUser(ctx, user.ID)
+
+	token, hash, err := generateSecureToken()
+	if err != nil {
+		log.Printf("auth: failed to generate reset token for user %s: %v", user.ID, err)
+		return nil
+	}
+
+	record := &models.PasswordResetToken{
+		UserID:    user.ID,
+		TokenHash: hash,
+		IssuedIP:  &requestIP,
+		ExpiresAt: time.Now().Add(s.cfg.PasswordResetTTL),
+	}
+	if err := s.resetRepo.Create(ctx, record); err != nil {
+		log.Printf("auth: failed to persist reset token for user %s: %v", user.ID, err)
+		return nil
+	}
+
+	resetURL := s.cfg.FrontendURL + "/reset-password?token=" + token
+	s.sendAuthEmail(ctx, email.PasswordResetEmail(user.Email, s.cfg.SMTPFrom, s.cfg.SMTPFromName, resetURL))
+	return nil
+}
+
+// ResetPassword redeems a reset token, sets a new password, and revokes
+// every existing session (refresh token) for the user — a leaked password
+// being reset shouldn't leave an attacker's session alive.
+func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	if len(newPassword) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+
+	record, err := s.resetRepo.FindByTokenHash(ctx, hashToken(token))
+	if err != nil {
+		return errors.New("invalid or expired reset token")
+	}
+	if record.UsedAt != nil || time.Now().After(record.ExpiresAt) {
+		return errors.New("invalid or expired reset token")
+	}
+
+	user, err := s.userRepo.FindByID(ctx, record.UserID)
+	if err != nil {
+		return errors.New("invalid or expired reset token")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	if err := s.resetRepo.MarkUsed(ctx, record.ID); err != nil {
+		return err
+	}
+
+	hashStr := string(hash)
+	user.PasswordHash = &hashStr
+	user.FailedLoginCount = 0
+	user.LockedUntil = nil
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	if err := s.sessionRepo.RevokeAllForUser(ctx, user.ID); err != nil {
+		log.Printf("auth: failed to revoke sessions for user %s after password reset: %v", user.ID, err)
+	}
+
+	s.sendAuthEmail(ctx, email.PasswordChangedEmail(user.Email, s.cfg.SMTPFrom, s.cfg.SMTPFromName))
+	return nil
+}
+
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	s.rdb.Set(ctx, "blacklist:"+refreshToken, "1", 7*24*time.Hour)
 	return nil
