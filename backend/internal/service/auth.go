@@ -138,10 +138,13 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*model
 		FirstName:      input.FirstName,
 		LastName:       input.LastName,
 		Status:         "active",
+		EmailVerified:  false,
 	}
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, nil, err
 	}
+
+	s.issueEmailVerification(ctx, user)
 
 	tokens, err := s.generateTokens(user)
 	if err != nil {
@@ -149,6 +152,71 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*model
 	}
 
 	return user, tokens, nil
+}
+
+// issueEmailVerification creates a fresh verification token (invalidating
+// any previously issued ones) and emails it. Registration must still
+// succeed even if this fails, so errors are logged, not returned.
+func (s *AuthService) issueEmailVerification(ctx context.Context, user *models.User) {
+	_ = s.emailVerifyRepo.InvalidateAllForUser(ctx, user.ID)
+
+	token, hash, err := generateSecureToken()
+	if err != nil {
+		log.Printf("auth: failed to generate verification token for user %s: %v", user.ID, err)
+		return
+	}
+
+	record := &models.EmailVerificationToken{
+		UserID:    user.ID,
+		TokenHash: hash,
+		ExpiresAt: time.Now().Add(s.cfg.EmailVerificationTTL),
+	}
+	if err := s.emailVerifyRepo.Create(ctx, record); err != nil {
+		log.Printf("auth: failed to persist verification token for user %s: %v", user.ID, err)
+		return
+	}
+
+	verifyURL := s.cfg.FrontendURL + "/verify-email?token=" + token
+	s.sendAuthEmail(ctx, email.VerificationEmail(user.Email, s.cfg.SMTPFrom, s.cfg.SMTPFromName, verifyURL))
+}
+
+// VerifyEmail redeems a verification token. Tokens are single-use and
+// expiring; an invalid/expired/already-used token all return the same
+// generic error so the endpoint can't be used to enumerate valid tokens.
+func (s *AuthService) VerifyEmail(ctx context.Context, token string) error {
+	record, err := s.emailVerifyRepo.FindByTokenHash(ctx, hashToken(token))
+	if err != nil {
+		return errors.New("invalid or expired verification token")
+	}
+	if record.UsedAt != nil || time.Now().After(record.ExpiresAt) {
+		return errors.New("invalid or expired verification token")
+	}
+
+	user, err := s.userRepo.FindByID(ctx, record.UserID)
+	if err != nil {
+		return errors.New("invalid or expired verification token")
+	}
+
+	if err := s.emailVerifyRepo.MarkUsed(ctx, record.ID); err != nil {
+		return err
+	}
+
+	now := time.Now()
+	user.EmailVerified = true
+	user.EmailVerifiedAt = &now
+	return s.userRepo.Update(ctx, user)
+}
+
+// ResendVerification reissues a verification token for the given email.
+// Always returns nil regardless of whether the address exists or is
+// already verified, so this endpoint can't be used to enumerate accounts.
+func (s *AuthService) ResendVerification(ctx context.Context, emailAddr string) error {
+	user, err := s.userRepo.FindByEmail(ctx, emailAddr)
+	if err != nil || user.EmailVerified {
+		return nil
+	}
+	s.issueEmailVerification(ctx, user)
+	return nil
 }
 
 func (s *AuthService) Login(ctx context.Context, input LoginInput) (*models.User, *AuthTokens, error) {
