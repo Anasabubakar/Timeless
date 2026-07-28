@@ -19,6 +19,16 @@ type Config struct {
 	JWTExpiry     time.Duration `env:"JWT_EXPIRY" envDefault:"24h"`
 	RefreshExpiry time.Duration `env:"REFRESH_EXPIRY" envDefault:"720h"`
 
+	// CredentialsEncryptionKey is the secret integration credentials
+	// (OAuth tokens, API keys) are encrypted with at rest. Defaults to
+	// JWTSecret so no extra required env var exists out of the box, but a
+	// dedicated key is recommended so rotating JWT signing doesn't force a
+	// credential re-encryption pass too. CredentialsEncryptionKeyPrevious
+	// holds retired keys (oldest first) so already-encrypted rows stay
+	// readable through a rotation — see security.CredentialCipher.
+	CredentialsEncryptionKey         string   `env:"CREDENTIALS_ENCRYPTION_KEY"`
+	CredentialsEncryptionKeyPrevious []string `env:"CREDENTIALS_ENCRYPTION_KEY_PREVIOUS" envSeparator:","`
+
 	GoogleClientID     string `env:"GOOGLE_CLIENT_ID"`
 	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET"`
 	GoogleRedirectURL  string `env:"GOOGLE_REDIRECT_URL"`
@@ -70,6 +80,15 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// CredentialKey is the secret to derive the credential encryption key
+// from, falling back to JWTSecret when no dedicated key is configured.
+func (c *Config) CredentialKey() string {
+	if c.CredentialsEncryptionKey != "" {
+		return c.CredentialsEncryptionKey
+	}
+	return c.JWTSecret
 }
 
 func (c *Config) IsDevelopment() bool {

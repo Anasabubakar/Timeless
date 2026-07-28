@@ -195,7 +195,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	// Integrations
 	integrationRepo := repository.NewIntegrationRepository(db)
 	syncRunRepo := repository.NewSyncRunRepository(db)
-	credentialCipher := security.NewCredentialCipher(cfg.JWTSecret)
+	credentialCipher := security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...)
 	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
 	integrationSvc := service.NewIntegrationService(integrationRepo, syncRunRepo, credentialCipher, workerClient, registryCfg)
 	integrationHandler := handler.NewIntegrationHandler(integrationSvc)
@@ -210,6 +210,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	integrations.Post("/:id/revoke", integrationHandler.Revoke)
 	integrations.Post("/:provider/connect", integrationHandler.Connect)
 	integrations.Patch("/notion/pages/:pageID", integrationHandler.PushNotionPage)
+	integrations.Post("/rotate-credentials", integrationHandler.RotateCredentials)
 
 	dedupeHandler := handler.NewDedupeHandler(db)
 	protected.Post("/companies/dedupe", dedupeHandler.MergeCompanies)

@@ -49,7 +49,7 @@ func main() {
 		},
 	)
 
-	cipher := security.NewCredentialCipher(cfg.JWTSecret)
+	cipher := security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...)
 	syncRunRepo := repository.NewSyncRunRepository(db)
 	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
 
