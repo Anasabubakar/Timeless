@@ -331,3 +331,22 @@ verification could and couldn't cover in a sandboxed environment.
 - **Rate limited**: status shows `retrying`; the sync_run's `error` field
   contains the provider's own Retry-After value, and the worker will
   retry at that exact time without any manual action needed.
+
+## Known limitations
+
+- **Notion write-back isn't wired into every entity update path.** The
+  conflict-safe primitive (`UpdatePageProperties`) and its API endpoint
+  exist and are tested, but automatically pushing every Sponsor/Contact/
+  Company edit back to a linked Notion page requires a persistent
+  entity-to-Notion-page mapping this session didn't build — today it's a
+  capability callers can use, not something that fires on every internal
+  edit automatically.
+- **"Webhooks by Zapier" (inbound Catch Hook receiver) isn't built.**
+  Research confirmed it's the right complementary mechanism to MCP for
+  event-driven flows Zapier's `tools/call` doesn't cover well, but this
+  session focused on the MCP consumption path (SponsorOS calling out
+  through Zapier), not receiving inbound Zap-triggered events.
+- **Zapier's classic-mode app grouping is a heuristic.** Zapier doesn't
+  document a tool-naming convention, so `appSlugFromAction` guesses at
+  app boundaries from name prefixes. Agentic mode (when a user's server
+  has it enabled) avoids this by returning real structured data instead.
