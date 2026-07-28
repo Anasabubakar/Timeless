@@ -4,7 +4,12 @@
 // concurrently without one org's credentials leaking into another's calls.
 package integration
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"time"
+)
 
 // ContactRecord is a lightweight, provider-agnostic shape for a person +
 // their company, used to populate the CRM (Company/Contact tables) from
@@ -27,11 +32,59 @@ type NoteRecord struct {
 	URL   string
 }
 
+// DiscoveredContactRecord is a role-targeted contact found for a specific
+// company (e.g. "who is the Head of Partnerships at Acme?"). Unlike
+// ContactRecord, it always carries how confident we are and where the data
+// came from, and Available=false when the role search came back empty — we
+// never invent a name/email/title to fill a gap.
+type DiscoveredContactRecord struct {
+	CompanyName   string
+	CompanyDomain string
+	RoleQueried   string // e.g. "Head of Partnerships"
+	Available     bool
+	Name          string
+	Title         string
+	Email         string
+	EmailStatus   string // verified | guessed | unverified | unavailable
+	LinkedinURL   string
+	Confidence    float64 // 0..1, derived from email_status + match quality
+	Source        string  // "apollo"
+}
+
 type SyncResult struct {
-	Provider string                 `json:"provider"`
-	Details  map[string]interface{} `json:"details"`
-	Contacts []ContactRecord        `json:"-"`
-	Notes    []NoteRecord           `json:"-"`
+	Provider           string                    `json:"provider"`
+	Details            map[string]interface{}    `json:"details"`
+	Contacts           []ContactRecord           `json:"-"`
+	Notes              []NoteRecord              `json:"-"`
+	DiscoveredContacts []DiscoveredContactRecord `json:"-"`
+	Warnings           []string                  `json:"-"`
+}
+
+// RateLimitError signals that a provider rejected a request for being over
+// its rate limit (or, for Apollo, out of credits). The worker uses
+// RetryAfterDuration to schedule the retry instead of guessing a backoff.
+type RateLimitError struct {
+	Provider   string
+	RetryAfter string // raw Retry-After header value, if the provider sent one
+}
+
+func (e *RateLimitError) Error() string {
+	if e.RetryAfter != "" {
+		return fmt.Sprintf("%s rate limit hit, retry after %s", e.Provider, e.RetryAfter)
+	}
+	return fmt.Sprintf("%s rate limit hit", e.Provider)
+}
+
+// RetryAfterDuration parses the Retry-After header (seconds, per HTTP spec)
+// and falls back to a conservative default when the provider didn't send one.
+func (e *RateLimitError) RetryAfterDuration(fallback time.Duration) time.Duration {
+	if e.RetryAfter == "" {
+		return fallback
+	}
+	if secs, err := strconv.Atoi(e.RetryAfter); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	return fallback
 }
 
 // Client validates and syncs data for one third-party provider.
