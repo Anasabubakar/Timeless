@@ -268,3 +268,17 @@ per-run duration and record counts) instead of just a single
 | `POST /companies/dedupe` | On-demand duplicate-company merge |
 | `PATCH /integrations/notion/pages/:pageID` | Conflict-safe write-back to a Notion page |
 | `POST /integrations/notion/webhook` | Notion's real-time event receiver (public, signature-verified) |
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `NOTION_CLIENT_ID` / `NOTION_CLIENT_SECRET` | Notion OAuth app credentials |
+| `CREDENTIALS_ENCRYPTION_KEY` | Dedicated secret for encrypting stored credentials (falls back to `JWT_SECRET`) |
+| `CREDENTIALS_ENCRYPTION_KEY_PREVIOUS` | Comma-separated retired encryption secrets, for key rotation |
+| `API_PUBLIC_URL` | Used to build the Notion OAuth redirect URI |
+| `FRONTEND_URL` | Where OAuth callbacks redirect back to after connect |
+
+Apollo and Zapier have no OAuth env vars — Apollo is API-key-only for
+regular customers, and Zapier has no third-party OAuth app registration
+(the user pastes a personal MCP connection token instead).
