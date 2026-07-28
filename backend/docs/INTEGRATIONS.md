@@ -184,3 +184,14 @@ credit-consuming, so they're capped at `maxEmailRevealsPerCompany` (6) per
 company per run, prioritized in `TargetRoles` order; confidence is derived
 from Apollo's own `email_status` (`verified` → 0.95, `guessed` → 0.4,
 `unverified` → 0.3), never asserted independently of it.
+
+## Data quality: normalization
+
+`internal/normalize` centralizes canonicalization: `Domain` strips
+scheme/`www.`/path/port so `Example.com`, `www.example.com`, and
+`https://example.com/` all compare equal; `Email` lowercases and trims;
+`CompanyName` strips common legal suffixes (Inc, LLC, Ltd, Corp, ...) for
+comparison purposes only — the original human-entered name is always what
+gets displayed/stored. Every ingestion path normalizes before it looks up
+an existing row, which is what actually prevents the duplicate in the
+first place (as opposed to merging it after the fact).
