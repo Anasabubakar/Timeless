@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import RotatingText from "@/components/ui/rotating-text";
 import {
   useRecommendGoals,
   usePlanAutomation,
@@ -14,9 +15,11 @@ import {
   type PlannedAutomation,
 } from "@/queries/discovery";
 import { useOnboardingState, useSaveOnboardingState, useCompleteOnboarding } from "@/queries/onboarding";
+import { useReducedMotion } from "@/hooks/use-media-query";
 
 export default function GoalsStepPage() {
   const router = useRouter();
+  const prefersReducedMotion = useReducedMotion();
   const { data: onboardingState } = useOnboardingState();
   const recommendGoals = useRecommendGoals();
   const planAutomation = usePlanAutomation();
@@ -74,7 +77,18 @@ export default function GoalsStepPage() {
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h1 className="text-2xl font-semibold">What would you like to accomplish?</h1>
+        {prefersReducedMotion ? (
+          <h1 className="text-2xl font-semibold">What would you like to accomplish?</h1>
+        ) : (
+          <RotatingText
+            texts={["What would you like to accomplish?"]}
+            auto={false}
+            splitBy="words"
+            staggerDuration={0.03}
+            mainClassName="justify-center text-2xl font-semibold"
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          />
+        )}
         <p className="mt-2 text-sm text-muted-foreground">
           Pick a goal and I'll propose an automation plan for it.
         </p>
