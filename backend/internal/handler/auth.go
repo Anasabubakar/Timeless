@@ -18,6 +18,17 @@ func NewAuthHandler(svc *service.AuthService) *AuthHandler {
 	return &AuthHandler{svc: svc}
 }
 
+// sessionMeta captures device/request info from the incoming HTTP
+// request so the service layer can persist a meaningful session record
+// without importing fiber.
+func sessionMeta(c fiber.Ctx, rememberMe bool) service.SessionMeta {
+	return service.SessionMeta{
+		IP:         c.IP(),
+		UserAgent:  c.Get("User-Agent"),
+		RememberMe: rememberMe,
+	}
+}
+
 func (h *AuthHandler) Register(c fiber.Ctx) error {
 	var input service.RegisterInput
 	if err := c.Bind().JSON(&input); err != nil {
@@ -32,7 +43,7 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "password must be at least 8 characters")
 	}
 
-	user, tokens, err := h.svc.Register(c.Context(), input)
+	user, tokens, err := h.svc.Register(c.Context(), input, sessionMeta(c, false))
 	if err != nil {
 		if err.Error() == "email already registered" {
 			return fiber.NewError(fiber.StatusConflict, err.Error())
@@ -52,7 +63,7 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
-	user, tokens, err := h.svc.Login(c.Context(), input)
+	user, tokens, err := h.svc.Login(c.Context(), input, sessionMeta(c, input.RememberMe))
 	if err != nil {
 		if errors.Is(err, service.ErrAccountLocked) {
 			return fiber.NewError(fiber.StatusTooManyRequests, err.Error())
@@ -163,14 +174,15 @@ func (h *AuthHandler) ResendVerification(c fiber.Ctx) error {
 
 func (h *AuthHandler) VerifyMFALogin(c fiber.Ctx) error {
 	var body struct {
-		Ticket string `json:"mfa_ticket"`
-		Code   string `json:"code"`
+		Ticket     string `json:"mfa_ticket"`
+		Code       string `json:"code"`
+		RememberMe bool   `json:"remember_me"`
 	}
 	if err := c.Bind().JSON(&body); err != nil || body.Ticket == "" || body.Code == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "mfa_ticket and code are required")
 	}
 
-	user, tokens, err := h.svc.VerifyMFALogin(c.Context(), body.Ticket, body.Code)
+	user, tokens, err := h.svc.VerifyMFALogin(c.Context(), body.Ticket, body.Code, sessionMeta(c, body.RememberMe))
 	if err != nil {
 		if errors.Is(err, service.ErrAccountLocked) {
 			return fiber.NewError(fiber.StatusTooManyRequests, err.Error())

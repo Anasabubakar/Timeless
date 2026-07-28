@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -102,8 +103,9 @@ type RegisterInput struct {
 }
 
 type LoginInput struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Email      string `json:"email" validate:"required,email"`
+	Password   string `json:"password" validate:"required"`
+	RememberMe bool   `json:"remember_me"`
 }
 
 type AuthTokens struct {
@@ -112,7 +114,7 @@ type AuthTokens struct {
 	ExpiresAt    int64  `json:"expires_at"`
 }
 
-func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*models.User, *AuthTokens, error) {
+func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta SessionMeta) (*models.User, *AuthTokens, error) {
 	existing, _ := s.userRepo.FindByEmail(ctx, input.Email)
 	if existing != nil {
 		return nil, nil, errors.New("email already registered")
@@ -148,7 +150,7 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*model
 
 	s.issueEmailVerification(ctx, user)
 
-	tokens, err := s.generateTokens(user)
+	tokens, err := s.generateTokens(ctx, user, meta)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -230,7 +232,7 @@ var ErrAccountLocked = errors.New("account is temporarily locked due to too many
 // VerifyMFALogin with a code before tokens are issued.
 var ErrMFARequired = errors.New("mfa verification required")
 
-func (s *AuthService) Login(ctx context.Context, input LoginInput) (*models.User, *AuthTokens, error) {
+func (s *AuthService) Login(ctx context.Context, input LoginInput, meta SessionMeta) (*models.User, *AuthTokens, error) {
 	user, err := s.userRepo.FindByEmail(ctx, input.Email)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -265,7 +267,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (*models.User
 		return user, nil, ErrMFARequired
 	}
 
-	return s.completeLogin(ctx, user)
+	return s.completeLogin(ctx, user, meta)
 }
 
 // mfaPendingTTL bounds how long a password-verified-but-not-yet-MFA'd
@@ -309,8 +311,8 @@ func (s *AuthService) parseMFAPendingTicket(ticket string) (uuid.UUID, error) {
 // completeLogin resets lockout state, updates LastLoginAt, and issues
 // tokens. Split out of Login so VerifyMFALogin can reuse it once the TOTP
 // step passes.
-func (s *AuthService) completeLogin(ctx context.Context, user *models.User) (*models.User, *AuthTokens, error) {
-	tokens, err := s.generateTokens(user)
+func (s *AuthService) completeLogin(ctx context.Context, user *models.User, meta SessionMeta) (*models.User, *AuthTokens, error) {
+	tokens, err := s.generateTokens(ctx, user, meta)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -372,13 +374,36 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*A
 		return nil, errors.New("user not found")
 	}
 
-	// Blacklist the old refresh token
+	// The session row is the source of truth for revocation (both
+	// explicit "log out this device" and "log out everywhere"); the
+	// Redis blacklist above is a fast-path cache of the same fact.
+	session, err := s.sessionRepo.FindByTokenHash(ctx, hashToken(refreshToken))
+	if err != nil {
+		return nil, errors.New("session not found")
+	}
+	if session.RevokedAt != nil {
+		return nil, errors.New("token has been revoked")
+	}
+
+	meta := SessionMeta{RememberMe: session.RememberMe}
+	if session.IP != nil {
+		meta.IP = *session.IP
+	}
+	if session.UserAgent != nil {
+		meta.UserAgent = *session.UserAgent
+	}
+
+	// Rotate: revoke the old session/token before issuing the new pair so
+	// a stolen refresh token can't be replayed after a legitimate refresh.
+	if err := s.sessionRepo.Revoke(ctx, session.ID); err != nil {
+		log.Printf("auth: failed to revoke rotated session %s: %v", session.ID, err)
+	}
 	exp, _ := claims.GetExpirationTime()
 	if exp != nil {
 		s.rdb.Set(ctx, "blacklist:"+refreshToken, "1", time.Until(exp.Time))
 	}
 
-	return s.generateTokens(user)
+	return s.generateTokens(ctx, user, meta)
 }
 
 // ForgotPassword issues a password-reset token and emails it. Always
@@ -481,7 +506,7 @@ func (s *AuthService) DisableMFA(ctx context.Context, userID uuid.UUID, currentP
 
 // VerifyMFALogin completes a login that Login() paused with ErrMFARequired.
 // Accepts either a live TOTP code or a backup code (consumed on use).
-func (s *AuthService) VerifyMFALogin(ctx context.Context, ticket, code string) (*models.User, *AuthTokens, error) {
+func (s *AuthService) VerifyMFALogin(ctx context.Context, ticket, code string, meta SessionMeta) (*models.User, *AuthTokens, error) {
 	userID, err := s.parseMFAPendingTicket(ticket)
 	if err != nil {
 		return nil, nil, err
@@ -504,11 +529,11 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, ticket, code string) (
 	}
 
 	if security.ValidateTOTP(secret, code) {
-		return s.completeLogin(ctx, user)
+		return s.completeLogin(ctx, user, meta)
 	}
 
 	if s.consumeBackupCode(ctx, user, code) {
-		return s.completeLogin(ctx, user)
+		return s.completeLogin(ctx, user, meta)
 	}
 
 	s.recordFailedLogin(ctx, user)
@@ -542,7 +567,39 @@ func (s *AuthService) consumeBackupCode(ctx context.Context, user *models.User, 
 
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	s.rdb.Set(ctx, "blacklist:"+refreshToken, "1", 7*24*time.Hour)
+
+	if session, err := s.sessionRepo.FindByTokenHash(ctx, hashToken(refreshToken)); err == nil {
+		_ = s.sessionRepo.Revoke(ctx, session.ID)
+	}
 	return nil
+}
+
+// ListSessions returns the user's active (non-revoked, non-expired)
+// sessions for a "your devices" settings view.
+func (s *AuthService) ListSessions(ctx context.Context, userID uuid.UUID) ([]models.RefreshToken, error) {
+	return s.sessionRepo.ListActiveByUser(ctx, userID)
+}
+
+// RevokeSession lets a user sign a single device out remotely. Verifies
+// the session belongs to the requesting user so one account can't revoke
+// another's session by guessing an ID.
+func (s *AuthService) RevokeSession(ctx context.Context, userID, sessionID uuid.UUID) error {
+	sessions, err := s.sessionRepo.ListActiveByUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	for _, sess := range sessions {
+		if sess.ID == sessionID {
+			return s.sessionRepo.Revoke(ctx, sessionID)
+		}
+	}
+	return errors.New("session not found")
+}
+
+// LogoutAllSessions revokes every session for the user ("log out
+// everywhere"), e.g. after the user notices unfamiliar activity.
+func (s *AuthService) LogoutAllSessions(ctx context.Context, userID uuid.UUID) error {
+	return s.sessionRepo.RevokeAllForUser(ctx, userID)
 }
 
 func (s *AuthService) GetUser(ctx context.Context, userID uuid.UUID) (*models.User, error) {
@@ -634,7 +691,21 @@ func (s *AuthService) ConfirmMFA(ctx context.Context, userID uuid.UUID, code str
 	return s.userRepo.Update(ctx, user)
 }
 
-func (s *AuthService) generateTokens(user *models.User) (*AuthTokens, error) {
+// SessionMeta describes the device/request a login or token refresh came
+// from, persisted alongside the session so "your active sessions" and
+// "log out everywhere" have something meaningful to show/revoke.
+type SessionMeta struct {
+	IP         string
+	UserAgent  string
+	RememberMe bool
+}
+
+// generateTokens issues an access/refresh JWT pair and persists a durable
+// session row for the refresh token (hash only) so it can be listed,
+// individually revoked, or bulk-revoked later — the Redis blacklist alone
+// only ever answers "was this specific token revoked", not "what sessions
+// does this user have".
+func (s *AuthService) generateTokens(ctx context.Context, user *models.User, meta SessionMeta) (*AuthTokens, error) {
 	now := time.Now()
 	accessExp := now.Add(15 * time.Minute)
 
@@ -653,7 +724,11 @@ func (s *AuthService) generateTokens(user *models.User) (*AuthTokens, error) {
 		return nil, err
 	}
 
-	refreshExp := now.Add(7 * 24 * time.Hour)
+	refreshTTL := s.cfg.RefreshExpiry
+	if meta.RememberMe {
+		refreshTTL = s.cfg.RememberMeExpiry
+	}
+	refreshExp := now.Add(refreshTTL)
 	refreshClaims := jwt.MapClaims{
 		"sub":  user.ID.String(),
 		"iat":  now.Unix(),
@@ -667,9 +742,51 @@ func (s *AuthService) generateTokens(user *models.User) (*AuthTokens, error) {
 		return nil, err
 	}
 
+	session := &models.RefreshToken{
+		UserID:     user.ID,
+		TokenHash:  hashToken(refreshStr),
+		RememberMe: meta.RememberMe,
+		LastUsedAt: now,
+		ExpiresAt:  refreshExp,
+	}
+	if meta.IP != "" {
+		session.IP = &meta.IP
+	}
+	if meta.UserAgent != "" {
+		session.UserAgent = &meta.UserAgent
+		label := deviceLabelFromUserAgent(meta.UserAgent)
+		session.DeviceLabel = &label
+	}
+	if err := s.sessionRepo.Create(ctx, session); err != nil {
+		log.Printf("auth: failed to persist session for user %s: %v", user.ID, err)
+	}
+
 	return &AuthTokens{
 		AccessToken:  accessStr,
 		RefreshToken: refreshStr,
 		ExpiresAt:    accessExp.Unix(),
 	}, nil
+}
+
+// deviceLabelFromUserAgent produces a short human-readable label from a
+// raw User-Agent header for display in the sessions list. Deliberately
+// crude (no external dependency) — good enough to tell devices apart,
+// not a full UA parser.
+func deviceLabelFromUserAgent(ua string) string {
+	switch {
+	case strings.Contains(ua, "iPhone"):
+		return "iPhone"
+	case strings.Contains(ua, "iPad"):
+		return "iPad"
+	case strings.Contains(ua, "Android"):
+		return "Android"
+	case strings.Contains(ua, "Macintosh"):
+		return "Mac"
+	case strings.Contains(ua, "Windows"):
+		return "Windows"
+	case strings.Contains(ua, "Linux"):
+		return "Linux"
+	default:
+		return "Unknown device"
+	}
 }
