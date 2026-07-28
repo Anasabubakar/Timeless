@@ -88,3 +88,11 @@ this way (the scanner buffer limit and the plaintext-token onboarding
 leak) that no amount of pure unit testing would have surfaced on their
 own. See "Testing approach" and "Known limitations" in
 [backend/docs/INTEGRATIONS.md](backend/docs/INTEGRATIONS.md) for detail.
+
+### Known limitations
+
+Notion write-back is a capability, not yet an automatic trigger on every
+entity edit; inbound "Webhooks by Zapier" (Catch Hook) receiving isn't
+built, only the MCP consumption path; Zapier's classic-mode app grouping
+is a documented heuristic, not a Zapier-guaranteed contract. Full detail
+in backend/docs/INTEGRATIONS.md.
