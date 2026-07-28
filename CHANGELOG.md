@@ -18,3 +18,15 @@ for the full architecture writeup.
 - A safe read-only sync pass that only ever auto-invokes zero-argument,
   read-verb-matching tools, never anything that looks like it could
   write/send/delete.
+
+### Added — Notion
+
+- Full OAuth 2.0 flow with refresh-token support (previously assumed not
+  to exist — Notion's current docs confirm it's real).
+- Schema/database discovery against the 2025-09-03 API (databases split
+  into data sources) with no hardcoded database/property names.
+- Incremental sync via a stored watermark, so steady-state re-syncs only
+  read what changed.
+- A real-time webhook receiver with signature verification.
+- Conflict-safe write-back that refuses to overwrite a page edited in
+  Notion since it was last read.
