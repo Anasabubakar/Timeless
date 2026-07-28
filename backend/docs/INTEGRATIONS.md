@@ -109,3 +109,15 @@ a write verb (`send`, `create`, `delete`, `update`, `post`, ...), and has
 zero required input arguments. Anything else is left alone — it's only
 ever invoked explicitly via `ExecuteAction` when a calling service
 deliberately wants that specific action.
+
+## Notion: schema/database discovery
+
+`NotionClient.Sync` paginates `/v1/search` (sorted newest-edited-first),
+and for every database result reads its `data_sources` (the 2025-09-03 API
+split a database into a container plus one or more data sources) via
+`/v1/data_sources/{id}`. No database or property name is ever hardcoded —
+`harvestDataSourceRows` inspects each data source's schema at query time to
+decide whether it looks like a contacts table (a title property plus an
+email/company-like column) and maps rows into `ContactRecord` accordingly,
+falling back to `NoteRecord` for anything else so nothing is silently
+dropped.
