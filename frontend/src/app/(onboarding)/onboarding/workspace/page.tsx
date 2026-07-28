@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import RotatingText from "@/components/ui/rotating-text";
 import { useIntegrations, useConnectIntegration } from "@/queries/integrations";
-import { useOnboardingState, useSaveOnboardingState } from "@/queries/onboarding";
+import { useSaveOnboardingState } from "@/queries/onboarding";
 import { useAuthStore } from "@/stores/auth";
 import { useReducedMotion } from "@/hooks/use-media-query";
 
@@ -33,33 +33,22 @@ function startOAuth(provider: string) {
 export default function WorkspaceStepPage() {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
-  const { data: onboardingState } = useOnboardingState();
   const saveState = useSaveOnboardingState();
   const { data: integrationsData, refetch: refetchIntegrations } = useIntegrations();
   const connectIntegration = useConnectIntegration();
 
-  const savedPayload = (onboardingState?.data.payload || {}) as Record<string, string>;
-  const [zapierToken, setZapierToken] = useState(savedPayload.zapier_token || "");
+  // Onboarding progress (step/payload) is persisted server-side in plain
+  // JSONB so it survives a refresh — that's fine for non-secret state, but
+  // the Zapier connection token must never round-trip through it. It only
+  // ever lives in local component state and the one real POST to
+  // /integrations/zapier/connect, which encrypts it before storage.
+  const [zapierToken, setZapierToken] = useState("");
   const [nativeValues, setNativeValues] = useState<Record<string, string>>({});
   const [connecting, setConnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (savedPayload.zapier_token) setZapierToken(savedPayload.zapier_token);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onboardingState?.data.id]);
-
-  function autosave(payload: Record<string, string>) {
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(() => {
-      saveState.mutate({ step: "workspace", payload });
-    }, 600);
-  }
 
   function handleZapierTokenChange(value: string) {
     setZapierToken(value);
-    autosave({ zapier_token: value });
   }
 
   const integrations = integrationsData?.data || [];
@@ -79,7 +68,7 @@ export default function WorkspaceStepPage() {
   }
 
   async function handleContinue() {
-    await saveState.mutateAsync({ step: "discovery", payload: { zapier_token: zapierToken } });
+    await saveState.mutateAsync({ step: "discovery", payload: {} });
     router.push("/onboarding/discovery");
   }
 
