@@ -475,6 +475,13 @@ func (c *ZapierClient) rpc(ctx context.Context, serverURL, bearer, method string
 	return rpcResp.Result, nil
 }
 
+// maxMCPLineSize overrides bufio.Scanner's 64KB default token limit. A real
+// tools/list response listing every enabled Zapier action (each with a
+// full JSON input schema) for a workspace with many connected apps easily
+// exceeds that default and fails with "bufio.Scanner: token too long" —
+// confirmed against a live Zapier MCP server, not a hypothetical.
+const maxMCPLineSize = 10 << 20 // 10MB
+
 // readMCPResponse reads either a plain JSON body or a single "data: ..."
 // frame from a text/event-stream response.
 func readMCPResponse(resp *http.Response) ([]byte, error) {
@@ -488,6 +495,7 @@ func readMCPResponse(resp *http.Response) ([]byte, error) {
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxMCPLineSize)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if data, ok := strings.CutPrefix(line, "data:"); ok {
