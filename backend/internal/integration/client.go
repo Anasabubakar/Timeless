@@ -28,8 +28,10 @@ type ContactRecord struct {
 // NoteRecord is a lightweight reference to a document/page a provider
 // surfaced, used to populate Recent Activity.
 type NoteRecord struct {
-	Title string
-	URL   string
+	Title      string
+	URL        string
+	ExternalID string // provider's own id, so re-syncing can dedupe/update instead of re-creating
+	UpdatedAt  string // RFC3339, provider's last-edited timestamp, for conflict-safe writes
 }
 
 // DiscoveredContactRecord is a role-targeted contact found for a specific
@@ -51,13 +53,70 @@ type DiscoveredContactRecord struct {
 	Source        string  // "apollo"
 }
 
+// SyncResult is what one Sync() pass reports back. State is merged (not
+// replaced) into the integration's stored config by the caller, so a
+// provider can carry forward cursors/watermarks (e.g. Notion's
+// last-synced-at) across incremental runs without the caller needing to
+// know what's inside it.
 type SyncResult struct {
 	Provider           string                    `json:"provider"`
 	Details            map[string]interface{}    `json:"details"`
+	State              map[string]interface{}    `json:"-"`
 	Contacts           []ContactRecord           `json:"-"`
 	Notes              []NoteRecord              `json:"-"`
 	DiscoveredContacts []DiscoveredContactRecord `json:"-"`
 	Warnings           []string                  `json:"-"`
+}
+
+// Client validates and syncs data for one third-party provider.
+type Client interface {
+	Provider() string
+	// Validate checks that the supplied credentials actually authenticate
+	// against the provider. Returning nil means the connection is real and
+	// live, not simulated.
+	Validate(ctx context.Context, credentials map[string]string) error
+	// Sync pulls real data from the provider. state is the previous run's
+	// SyncResult.State (nil on first connect), letting a provider resume
+	// from a cursor/watermark instead of re-processing everything.
+	Sync(ctx context.Context, credentials map[string]string, state map[string]interface{}) (*SyncResult, error)
+}
+
+// Refresher is implemented by providers whose OAuth tokens expire and can
+// be silently renewed with a refresh token. The caller must persist the
+// returned credentials (both fields may have rotated).
+type Refresher interface {
+	Refresh(ctx context.Context, credentials map[string]string) (map[string]string, error)
+}
+
+// RegistryConfig carries the provider-specific settings Registry() needs to
+// construct clients (OAuth client id/secret for providers that support
+// token refresh). Kept minimal and provider-agnostic rather than importing
+// the whole app config package here.
+type RegistryConfig struct {
+	NotionClientID     string
+	NotionClientSecret string
+}
+
+// Registry returns every provider client this app supports, keyed by the
+// `provider` value stored on models.Integration.
+func Registry(cfg RegistryConfig) map[string]Client {
+	return map[string]Client{
+		"zapier": NewZapierClient(),
+		"notion": NewNotionClient(cfg.NotionClientID, cfg.NotionClientSecret),
+		"apollo": NewApolloClient(),
+	}
+}
+
+// AuthExpiredError signals that a provider rejected our credentials as
+// expired or revoked (typically HTTP 401). Callers should attempt a
+// Refresher.Refresh if the client supports it, and otherwise mark the
+// integration as needing reconnect rather than retrying blindly.
+type AuthExpiredError struct {
+	Provider string
+}
+
+func (e *AuthExpiredError) Error() string {
+	return fmt.Sprintf("%s authorization expired or was revoked — reconnect required", e.Provider)
 }
 
 // RateLimitError signals that a provider rejected a request for being over
@@ -85,26 +144,4 @@ func (e *RateLimitError) RetryAfterDuration(fallback time.Duration) time.Duratio
 		return time.Duration(secs) * time.Second
 	}
 	return fallback
-}
-
-// Client validates and syncs data for one third-party provider.
-type Client interface {
-	Provider() string
-	// Validate checks that the supplied credentials actually authenticate
-	// against the provider. Returning nil means the connection is real and
-	// live, not simulated.
-	Validate(ctx context.Context, credentials map[string]string) error
-	// Sync performs a lightweight pull to confirm the connection is usable
-	// end-to-end and report back a coarse summary of what's available.
-	Sync(ctx context.Context, credentials map[string]string) (*SyncResult, error)
-}
-
-// Registry returns every provider client Phase 1 supports, keyed by the
-// `provider` value stored on models.Integration.
-func Registry() map[string]Client {
-	return map[string]Client{
-		"zapier": NewZapierClient(),
-		"notion": NewNotionClient(),
-		"apollo": NewApolloClient(),
-	}
 }
