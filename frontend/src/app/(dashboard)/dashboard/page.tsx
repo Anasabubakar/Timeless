@@ -12,6 +12,17 @@ import { motion } from "motion/react";
 import { cn, formatCurrency, formatNumber } from "@/lib/utils";
 import { useDashboardStats, usePipelineAnalytics, useRecentActivity } from "@/queries/analytics";
 import { useIntegrations } from "@/queries/integrations";
+import { useCurrentOrganization } from "@/queries/settings";
+import { useReducedMotion } from "@/hooks/use-media-query";
+import RotatingText from "@/components/ui/rotating-text";
+import CountUp from "@/components/ui/count-up";
+
+function greetingForTimeOfDay() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
 
 const stageColors: Record<string, string> = {
   prospect: "bg-neutral-200",
@@ -49,6 +60,8 @@ export default function DashboardPage() {
   const { data: pipelineData, isLoading: pipelineLoading } = usePipelineAnalytics();
   const { data: activityData, isLoading: activityLoading } = useRecentActivity();
   const { data: integrationsData } = useIntegrations();
+  const { data: orgData } = useCurrentOrganization();
+  const prefersReducedMotion = useReducedMotion();
 
   const syncingIntegrations = (integrationsData?.data ?? []).filter((i) => i.status === "syncing");
 
@@ -92,10 +105,27 @@ export default function DashboardPage() {
     );
   }
 
+  const orgName = orgData?.organization?.name;
+  const titleTexts =
+    orgName && typeof orgName === "string"
+      ? [greetingForTimeOfDay(), orgName, "Dashboard"]
+      : ["Dashboard"];
+
   return (
     <motion.div className="space-y-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        {prefersReducedMotion || titleTexts.length === 1 ? (
+          <h1 className="text-2xl font-semibold tracking-tight">{titleTexts[0]}</h1>
+        ) : (
+          <RotatingText
+            texts={titleTexts}
+            mainClassName="text-2xl font-semibold tracking-tight"
+            staggerDuration={0.02}
+            rotationInterval={4000}
+            splitBy="words"
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          />
+        )}
         <p className="text-sm text-muted-foreground">
           Your sponsorship operations at a glance
         </p>
@@ -129,13 +159,33 @@ export default function DashboardPage() {
               <stat.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-xl font-semibold tracking-tight sm:text-2xl">
-                {stat.format === "currency"
-                  ? formatCurrency(stat.value)
-                  : stat.format === "percent"
-                  ? `${stat.value.toFixed(1)}%`
-                  : formatNumber(stat.value)}
-              </span>
+              {stat.format === "currency" ? (
+                <span className="flex items-baseline text-xl font-semibold tracking-tight sm:text-2xl">
+                  $
+                  <CountUp
+                    to={stat.value}
+                    separator=","
+                    className="text-xl font-semibold tracking-tight sm:text-2xl"
+                  />
+                </span>
+              ) : stat.format === "percent" ? (
+                <span className="flex items-baseline text-xl font-semibold tracking-tight sm:text-2xl">
+                  <CountUp
+                    to={stat.value}
+                    className="text-xl font-semibold tracking-tight sm:text-2xl"
+                  />
+                  %
+                </span>
+              ) : stat.value < 1000 ? (
+                <CountUp
+                  to={stat.value}
+                  className="text-xl font-semibold tracking-tight sm:text-2xl"
+                />
+              ) : (
+                <span className="text-xl font-semibold tracking-tight sm:text-2xl">
+                  {formatNumber(stat.value)}
+                </span>
+              )}
               {stat.value > 0 && (
                 <span className="flex items-center text-xs font-medium text-emerald-600">
                   <ArrowUpRight className="mr-0.5 h-3 w-3" />
