@@ -45,6 +45,7 @@ The app runs at:
 - **Outreach Sequences** — Multi-step email/call sequences with enrollment tracking
 - **Automations** — Trigger-based workflows (e.g., auto-qualify on create, stage change notifications)
 - **Webhooks** — Event-driven integrations with retry logic and delivery tracking
+- **Integrations** — Zapier (primary gateway), Notion, and Apollo, with real OAuth/API-key connect, incremental sync, auto-retry, and duplicate merging — see [backend/docs/INTEGRATIONS.md](backend/docs/INTEGRATIONS.md)
 - **Real-time** — WebSocket + SSE for live pipeline updates
 - **Analytics** — KPI dashboard, pipeline funnel, activity timeline
 - **Multi-tenant** — Organization-scoped data isolation, RBAC-ready
