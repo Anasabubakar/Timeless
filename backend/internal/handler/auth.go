@@ -244,6 +244,48 @@ func (h *AuthHandler) DisableMFA(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "mfa disabled"})
 }
 
+func (h *AuthHandler) ListSessions(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == uuid.Nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+	}
+
+	sessions, err := h.svc.ListSessions(c.Context(), userID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to list sessions")
+	}
+	return c.JSON(fiber.Map{"sessions": sessions})
+}
+
+func (h *AuthHandler) RevokeSession(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == uuid.Nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+	}
+
+	sessionID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid session id")
+	}
+
+	if err := h.svc.RevokeSession(c.Context(), userID, sessionID); err != nil {
+		return fiber.NewError(fiber.StatusNotFound, err.Error())
+	}
+	return c.JSON(fiber.Map{"message": "session revoked"})
+}
+
+func (h *AuthHandler) LogoutAllSessions(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == uuid.Nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+	}
+
+	if err := h.svc.LogoutAllSessions(c.Context(), userID); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to revoke sessions")
+	}
+	return c.JSON(fiber.Map{"message": "logged out of all sessions"})
+}
+
 func (h *AuthHandler) Me(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {

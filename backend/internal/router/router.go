@@ -85,6 +85,9 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	protected.Post("/auth/mfa/enroll", authHandler.EnrollMFA)
 	protected.Post("/auth/mfa/confirm", authHandler.ConfirmMFA)
 	protected.Post("/auth/mfa/disable", authHandler.DisableMFA)
+	protected.Get("/auth/sessions", authHandler.ListSessions)
+	protected.Delete("/auth/sessions/:id", authHandler.RevokeSession)
+	protected.Post("/auth/sessions/revoke-all", authHandler.LogoutAllSessions)
 
 	// Organizations
 	orgHandler := handler.NewOrganizationHandler(service.NewOrganizationService(orgRepo))
