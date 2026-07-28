@@ -76,3 +76,15 @@ for the full architecture writeup.
 - The onboarding "Connect workspace" step persisted a pasted Zapier token
   in plaintext into `onboarding_states.payload`, separately from (and
   bypassing the encryption of) the real connect flow.
+
+### Verification
+
+Beyond unit tests, this was verified against live accounts during
+development: real Apollo API key validation and enrichment, real Zapier
+MCP connection (119 connected apps, 310 actions discovered from an actual
+account), and real sync execution through the background worker — not
+just "looks connected" in the UI. Two real bugs were caught and fixed
+this way (the scanner buffer limit and the plaintext-token onboarding
+leak) that no amount of pure unit testing would have surfaced on their
+own. See "Testing approach" and "Known limitations" in
+[backend/docs/INTEGRATIONS.md](backend/docs/INTEGRATIONS.md) for detail.
