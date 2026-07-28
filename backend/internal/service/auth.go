@@ -35,6 +35,7 @@ type AuthService struct {
 	rdb             *redis.Client
 	mailer          *email.Sender
 	cipher          *security.CredentialCipher
+	keyring         *security.JWTKeyring
 }
 
 func NewAuthService(
@@ -57,7 +58,33 @@ func NewAuthService(
 		rdb:             rdb,
 		mailer:          mailer,
 		cipher:          security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...),
+		keyring:         security.NewJWTKeyring(cfg.JWTSecret, cfg.JWTSecretPrevious...),
 	}
+}
+
+// signJWT signs claims with the current keyring key and tags the token
+// with its kid, so a future rotation can still verify it via
+// JWTSecretPrevious without invalidating tokens issued under this key.
+func (s *AuthService) signJWT(claims jwt.MapClaims) (string, error) {
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tok.Header["kid"] = s.keyring.CurrentKeyID()
+	return tok.SignedString(s.keyring.CurrentKey())
+}
+
+// parseJWT verifies a token against the keyring, resolving whichever key
+// (current or retired) its kid header names.
+func (s *AuthService) parseJWT(tokenString string) (*jwt.Token, error) {
+	return jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("invalid signing method")
+		}
+		kid, _ := t.Header["kid"].(string)
+		key, ok := s.keyring.Key(kid)
+		if !ok {
+			return nil, errors.New("unknown signing key")
+		}
+		return key, nil
+	})
 }
 
 // generateSecureToken returns a URL-safe random token plus the sha256 hash
@@ -286,14 +313,11 @@ func (s *AuthService) IssueMFAPendingTicket(user *models.User) (string, error) {
 		"iat":  time.Now().Unix(),
 		"exp":  time.Now().Add(mfaPendingTTL).Unix(),
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return tok.SignedString([]byte(s.cfg.JWTSecret))
+	return s.signJWT(claims)
 }
 
 func (s *AuthService) parseMFAPendingTicket(ticket string) (uuid.UUID, error) {
-	tok, err := jwt.Parse(ticket, func(t *jwt.Token) (interface{}, error) {
-		return []byte(s.cfg.JWTSecret), nil
-	})
+	tok, err := s.parseJWT(ticket)
 	if err != nil || !tok.Valid {
 		return uuid.Nil, errors.New("invalid or expired mfa ticket")
 	}
@@ -342,9 +366,7 @@ func (s *AuthService) recordFailedLogin(ctx context.Context, user *models.User) 
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*AuthTokens, error) {
-	token, err := jwt.Parse(refreshToken, func(t *jwt.Token) (interface{}, error) {
-		return []byte(s.cfg.JWTSecret), nil
-	})
+	token, err := s.parseJWT(refreshToken)
 	if err != nil || !token.Valid {
 		return nil, errors.New("invalid refresh token")
 	}
@@ -718,8 +740,7 @@ func (s *AuthService) generateTokens(ctx context.Context, user *models.User, met
 		"type":   "access",
 	}
 
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
-	accessStr, err := accessToken.SignedString([]byte(s.cfg.JWTSecret))
+	accessStr, err := s.signJWT(accessClaims)
 	if err != nil {
 		return nil, err
 	}
@@ -736,8 +757,7 @@ func (s *AuthService) generateTokens(ctx context.Context, user *models.User, met
 		"type": "refresh",
 	}
 
-	refreshTokenJWT := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
-	refreshStr, err := refreshTokenJWT.SignedString([]byte(s.cfg.JWTSecret))
+	refreshStr, err := s.signJWT(refreshClaims)
 	if err != nil {
 		return nil, err
 	}

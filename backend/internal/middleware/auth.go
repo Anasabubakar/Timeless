@@ -7,14 +7,19 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/timeless/backend/internal/config"
+	"github.com/timeless/backend/internal/security"
 )
 
 type AuthMiddleware struct {
-	cfg *config.Config
+	cfg     *config.Config
+	keyring *security.JWTKeyring
 }
 
 func NewAuth(cfg *config.Config) *AuthMiddleware {
-	return &AuthMiddleware{cfg: cfg}
+	return &AuthMiddleware{
+		cfg:     cfg,
+		keyring: security.NewJWTKeyring(cfg.JWTSecret, cfg.JWTSecretPrevious...),
+	}
 }
 
 func (m *AuthMiddleware) Handle(c fiber.Ctx) error {
@@ -51,7 +56,12 @@ func (m *AuthMiddleware) authenticate(c fiber.Ctx, tokenString string) error {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fiber.NewError(fiber.StatusUnauthorized, "invalid signing method")
 		}
-		return []byte(m.cfg.JWTSecret), nil
+		kid, _ := t.Header["kid"].(string)
+		key, ok := m.keyring.Key(kid)
+		if !ok {
+			return nil, fiber.NewError(fiber.StatusUnauthorized, "unknown signing key")
+		}
+		return key, nil
 	})
 	if err != nil || !token.Valid {
 		return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")

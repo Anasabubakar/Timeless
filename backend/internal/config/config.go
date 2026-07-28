@@ -18,6 +18,11 @@ type Config struct {
 	JWTSecret     string        `env:"JWT_SECRET,required"`
 	JWTExpiry     time.Duration `env:"JWT_EXPIRY" envDefault:"24h"`
 	RefreshExpiry time.Duration `env:"REFRESH_EXPIRY" envDefault:"720h"`
+	// JWTSecretPrevious holds retired JWT signing secrets (oldest first)
+	// so rotating JWT_SECRET doesn't immediately invalidate every
+	// access/refresh token already in a user's browser — see
+	// security.JWTKeyring for how verification falls back through them.
+	JWTSecretPrevious []string `env:"JWT_SECRET_PREVIOUS" envSeparator:","`
 	// RememberMeExpiry is used instead of RefreshExpiry when the client
 	// opts into "remember me" at login; RefreshExpiry alone doubles as the
 	// non-remembered session length so existing behavior is unchanged.
