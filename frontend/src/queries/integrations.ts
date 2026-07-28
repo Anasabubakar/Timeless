@@ -112,6 +112,16 @@ export function useDeleteIntegration() {
   });
 }
 
+export function useTriggerSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/integrations/${id}/sync`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["integrations"] });
+    },
+  });
+}
+
 export function useRevokeIntegration() {
   const queryClient = useQueryClient();
   return useMutation({
