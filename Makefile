@@ -6,8 +6,8 @@ help: ## Show this help
 
 # Development
 dev: dev-infra ## Start full development stack
-	@echo "Starting backend and frontend..."
-	@make -j2 dev-backend dev-frontend
+	@echo "Starting backend, worker, and frontend..."
+	@make -j3 dev-backend dev-worker dev-frontend
 
 dev-infra: ## Start infrastructure (Postgres, Redis, MinIO)
 	docker compose up -d postgres redis minio
