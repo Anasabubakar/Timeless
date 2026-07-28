@@ -246,3 +246,12 @@ older than `resyncInterval` (15 minutes) and isn't already mid-sync — the
 polling fallback for whatever a webhook doesn't cover (Apollo/Zapier have
 no event-push mechanism at all; Notion's webhooks cover most but not
 necessarily every change type).
+
+## Observability: sync_runs table
+
+Every sync execution — connect, scheduled, webhook-triggered, or manual —
+is recorded as a `models.SyncRun` row: trigger, status, started/finished
+timestamps, duration, records synced, warnings, and error. This is what
+lets the dashboard show real history ("2 failed syncs in the last 24h",
+per-run duration and record counts) instead of just a single
+`last_sync_at` timestamp.
