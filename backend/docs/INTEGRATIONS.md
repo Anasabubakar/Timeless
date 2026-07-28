@@ -237,3 +237,12 @@ permanently block that integration from ever syncing again, since
 `failed`, and `worker.RecoverStaleSyncs` (run once at worker startup)
 calls it and re-enqueues a fresh sync for whatever integration was left
 stuck — recovery without a human needing to notice.
+
+## Background workers: periodic re-sync scheduler
+
+`worker.StartPeriodicResync` ticks every 5 minutes and enqueues a sync
+(trigger `scheduled`) for any `active` integration whose `last_sync_at` is
+older than `resyncInterval` (15 minutes) and isn't already mid-sync — the
+polling fallback for whatever a webhook doesn't cover (Apollo/Zapier have
+no event-push mechanism at all; Notion's webhooks cover most but not
+necessarily every change type).
