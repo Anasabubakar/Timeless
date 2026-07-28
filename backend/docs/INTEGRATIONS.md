@@ -131,3 +131,22 @@ workspace. The watermark round-trips through `SyncResult.State` and
 `Integration.Config` (see `mergeConfig`/`extractState` in the worker
 package), not through any Notion-side cursor, since Notion's search API
 doesn't expose one.
+
+## Notion: webhooks
+
+`POST /integrations/notion/webhook` handles Notion's real-time events
+(`developers.notion.com/reference/webhooks`):
+
+1. **Verification handshake**: the first request after saving this URL in
+   the integration's Webhooks configuration tab carries
+   `{"verification_token": "..."}`. It's stored in Redis
+   (`notion:webhook:verification_token`) — this is app-wide (one Notion
+   OAuth app, one webhook endpoint), not per-org.
+2. **Signed events**: every subsequent request is verified via
+   `X-Notion-Signature: sha256=<hex>` — HMAC-SHA256 over the raw body,
+   keyed by the stored verification token. An invalid signature is
+   rejected with 401 before the payload is even parsed.
+3. Verified events are matched to an org by `workspace_id` (via
+   `Integration.ExternalAccountID`, populated at connect time) and
+   dispatched as an incremental sync job — the HTTP handler itself does no
+   processing, so a burst of Notion activity can't make the endpoint slow.
