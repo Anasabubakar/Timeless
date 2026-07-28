@@ -73,8 +73,7 @@ type ProviderDef = {
 };
 
 // Zapier is the PRIMARY integration gateway; Notion and Apollo are secondary.
-// Only providers with a real, working backend client are listed here — no
-// placeholder entries for unimplemented providers.
+// Only providers with a real, working backend client are connectable here.
 const AVAILABLE_PROVIDERS: ProviderDef[] = [
   { id: "zapier", name: "Zapier", type: "automation", oauth: false, credentialFields: [
     { field: "token", label: "Zapier MCP Connection Token", placeholder: "Paste the token from mcp.zapier.com's Connect tab" },
@@ -83,6 +82,17 @@ const AVAILABLE_PROVIDERS: ProviderDef[] = [
   { id: "apollo", name: "Apollo", type: "enrichment", oauth: false, credentialFields: [
     { field: "api_key", label: "Apollo API Key", placeholder: "Paste your Apollo.io API key" },
   ] },
+];
+
+// Shown for visibility/roadmap purposes, but not connectable yet — no
+// backend client exists for these. Clicking shows a "still cooking"
+// indicator instead of silently doing nothing or creating a fake,
+// non-functional integration row.
+const COMING_SOON_PROVIDERS: { id: string; name: string; type: string }[] = [
+  { id: "salesforce", name: "Salesforce", type: "crm" },
+  { id: "hubspot", name: "HubSpot", type: "crm" },
+  { id: "slack", name: "Slack", type: "messaging" },
+  { id: "google", name: "Google Workspace", type: "email" },
 ];
 
 function formatLastSync(dateStr?: string): string {
@@ -375,6 +385,25 @@ function AddIntegrationDialog({ open, onOpenChange, existingProviders }: { open:
               </button>
             );
           })}
+
+          <div className="my-2 border-t border-border" />
+
+          {COMING_SOON_PROVIDERS.map((provider) => (
+            <button
+              key={provider.id}
+              onClick={() => toast(`🍳 ${provider.name} is still cooking — not connectable yet`)}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium opacity-60 transition-colors hover:bg-muted"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                <Link2 className="h-3.5 w-3.5" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="text-sm font-medium">{provider.name}</p>
+                <p className="text-[10px] text-muted-foreground capitalize">{provider.type}</p>
+              </div>
+              <Badge variant="secondary" className="text-[10px]">🍳 Cooking</Badge>
+            </button>
+          ))}
         </div>
       </DialogContent>
     </Dialog>
