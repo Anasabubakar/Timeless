@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import RotatingText from "@/components/ui/rotating-text";
 import { useSaveOnboardingState, useCompleteOnboarding } from "@/queries/onboarding";
+import { useReducedMotion } from "@/hooks/use-media-query";
 
 interface ComingSoonStepProps {
   step: string;
@@ -19,6 +21,7 @@ export function ComingSoonStep({ step, title, description, nextStep }: ComingSoo
   const router = useRouter();
   const saveState = useSaveOnboardingState();
   const completeOnboarding = useCompleteOnboarding();
+  const prefersReducedMotion = useReducedMotion();
 
   async function handleContinue() {
     if (nextStep) {
@@ -33,7 +36,18 @@ export function ComingSoonStep({ step, title, description, nextStep }: ComingSoo
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">{title}</CardTitle>
+        {prefersReducedMotion ? (
+          <CardTitle className="text-lg">{title}</CardTitle>
+        ) : (
+          <RotatingText
+            texts={[title]}
+            auto={false}
+            splitBy="words"
+            staggerDuration={0.03}
+            mainClassName="text-lg font-medium leading-none"
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          />
+        )}
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
