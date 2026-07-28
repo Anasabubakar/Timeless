@@ -108,6 +108,12 @@ func (s *IntegrationService) Connect(ctx context.Context, orgID, userID uuid.UUI
 	rec.Status = "syncing"
 	rec.Credentials = encryptedCreds
 	rec.LastError = nil
+	// workspace_id isn't a secret and isn't inside the encrypted blob on
+	// its own — stash it in the clear so inbound webhooks (which carry a
+	// workspace id but no org context of ours) can route back here.
+	if wsID := input.Credentials["workspace_id"]; wsID != "" {
+		rec.ExternalAccountID = &wsID
+	}
 
 	if rec.ID == uuid.Nil {
 		if err := s.repo.Create(ctx, rec); err != nil {
@@ -152,6 +158,47 @@ func (s *IntegrationService) DiscoverConnectedApps(ctx context.Context, orgID uu
 		return nil, false, fmt.Errorf("zapier client unavailable")
 	}
 	return zapier.DiscoverApps(ctx, credentials)
+}
+
+// EnqueueWebhookSync routes an inbound provider webhook event to the right
+// integration (matched by the provider's own account/workspace id, since
+// the webhook request itself carries no org context of ours) and enqueues
+// an incremental sync. Returns the matched org/integration id for logging.
+func (s *IntegrationService) EnqueueWebhookSync(ctx context.Context, provider, externalAccountID string) (uuid.UUID, uuid.UUID, error) {
+	rec, err := s.repo.GetByExternalAccountID(ctx, provider, externalAccountID)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("no integration found for %s account %s: %w", provider, externalAccountID, err)
+	}
+	if s.worker == nil {
+		return rec.OrganizationID, rec.ID, fmt.Errorf("worker client unavailable")
+	}
+	_, err = s.worker.Enqueue(worker.TaskIntegrationSync, worker.TaskPayload{
+		OrgID:      rec.OrganizationID.String(),
+		EntityID:   rec.ID.String(),
+		EntityType: "integration",
+		Action:     provider,
+		Data:       map[string]interface{}{"trigger": "webhook"},
+	})
+	return rec.OrganizationID, rec.ID, err
+}
+
+// PushToNotionPage writes SponsorOS-side changes back to a Notion page,
+// refusing (returning integration.ConflictError) rather than clobbering it
+// if the page changed in Notion since expectedLastEditedTime.
+func (s *IntegrationService) PushToNotionPage(ctx context.Context, orgID uuid.UUID, pageID string, properties map[string]interface{}, expectedLastEditedTime string) error {
+	rec, err := s.repo.GetByProvider(ctx, orgID, "notion")
+	if err != nil || rec.Status != "active" {
+		return fmt.Errorf("notion is not connected")
+	}
+	credentials, err := s.decryptCredentials(rec.Credentials)
+	if err != nil {
+		return err
+	}
+	notion, ok := s.clients["notion"].(*integration.NotionClient)
+	if !ok {
+		return fmt.Errorf("notion client unavailable")
+	}
+	return notion.UpdatePageProperties(ctx, credentials, pageID, properties, expectedLastEditedTime)
 }
 
 // ExecuteZapierAction is the entry point for "always try Zapier first":

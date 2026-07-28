@@ -88,6 +88,37 @@ func (c *NotionClient) Validate(ctx context.Context, credentials map[string]stri
 	return err
 }
 
+// UpdatePageProperties writes properties back to a Notion page — but only
+// if the page hasn't changed upstream since expectedLastEditedTime. That's
+// the entire "never overwrite newer data with stale data" contract: we
+// re-read the page's current last_edited_time immediately before writing,
+// and refuse (returning ConflictError, not silently forcing it) if someone
+// edited it in Notion after we last read it. Pass expectedLastEditedTime
+// "" to skip the check for a brand-new page nobody else could have touched.
+func (c *NotionClient) UpdatePageProperties(ctx context.Context, credentials map[string]string, pageID string, properties map[string]interface{}, expectedLastEditedTime string) error {
+	token := strings.TrimSpace(credentials["token"])
+	if token == "" {
+		return fmt.Errorf("token is required")
+	}
+
+	if expectedLastEditedTime != "" {
+		current, err := c.doJSON(ctx, http.MethodGet, "https://api.notion.com/v1/pages/"+pageID, token, nil)
+		if err != nil {
+			return fmt.Errorf("check current page state: %w", err)
+		}
+		currentEdited, _ := current["last_edited_time"].(string)
+		if currentEdited != "" && currentEdited > expectedLastEditedTime {
+			return &ConflictError{
+				Provider: "notion",
+				Message:  fmt.Sprintf("page %s was edited at %s, after our last read at %s", pageID, currentEdited, expectedLastEditedTime),
+			}
+		}
+	}
+
+	_, err := c.doJSON(ctx, http.MethodPatch, "https://api.notion.com/v1/pages/"+pageID, token, map[string]interface{}{"properties": properties})
+	return err
+}
+
 // doJSON issues one Notion API call and maps well-known failure modes
 // (expired/revoked auth, rate limiting) to sentinel error types the caller
 // can act on, instead of a bare "HTTP 401" string.

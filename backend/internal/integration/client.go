@@ -119,6 +119,20 @@ func (e *AuthExpiredError) Error() string {
 	return fmt.Sprintf("%s authorization expired or was revoked — reconnect required", e.Provider)
 }
 
+// ConflictError signals a write-back was refused because the record
+// changed upstream since we last read it — this is the mechanism behind
+// "never overwrite newer data with stale data." Callers should surface it
+// to the user (e.g. "this page changed in Notion, refresh and retry")
+// rather than silently forcing the write.
+type ConflictError struct {
+	Provider string
+	Message  string
+}
+
+func (e *ConflictError) Error() string {
+	return fmt.Sprintf("%s conflict: %s", e.Provider, e.Message)
+}
+
 // RateLimitError signals that a provider rejected a request for being over
 // its rate limit (or, for Apollo, out of credits). The worker uses
 // RetryAfterDuration to schedule the retry instead of guessing a backoff.

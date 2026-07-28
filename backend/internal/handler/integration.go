@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
+	"github.com/timeless/backend/internal/integration"
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
 	"github.com/timeless/backend/internal/service"
@@ -146,4 +149,33 @@ func (h *IntegrationHandler) ZapierApps(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 	return c.JSON(fiber.Map{"data": apps, "agentic_mode": agentic})
+}
+
+type pushNotionPageRequest struct {
+	Properties             map[string]interface{} `json:"properties"`
+	ExpectedLastEditedTime string                 `json:"expected_last_edited_time"`
+}
+
+// PushNotionPage writes SponsorOS-side changes back to a Notion page.
+// Returns 409 Conflict (not 500) when Notion's copy changed since we last
+// read it, so the frontend can show "this was edited in Notion, refresh
+// and retry" instead of a generic error.
+func (h *IntegrationHandler) PushNotionPage(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	pageID := c.Params("pageID")
+
+	var req pushNotionPageRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	err := h.svc.PushToNotionPage(c.Context(), orgID, pageID, req.Properties, req.ExpectedLastEditedTime)
+	if err != nil {
+		var conflictErr *integration.ConflictError
+		if errors.As(err, &conflictErr) {
+			return fiber.NewError(fiber.StatusConflict, conflictErr.Error())
+		}
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
