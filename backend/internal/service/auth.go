@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"log"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"github.com/timeless/backend/internal/config"
@@ -91,12 +93,12 @@ func (s *AuthService) sendAuthEmail(ctx context.Context, msg *email.Message) {
 }
 
 type RegisterInput struct {
-	Email        string `json:"email" validate:"required,email"`
-	Password     string `json:"password" validate:"required,min=8"`
-	FirstName    string `json:"first_name" validate:"required"`
-	LastName     string `json:"last_name" validate:"required"`
-	OrgName      string `json:"org_name" validate:"required"`
-	OrgSlug      string `json:"org_slug" validate:"required"`
+	Email     string `json:"email" validate:"required,email"`
+	Password  string `json:"password" validate:"required,min=8"`
+	FirstName string `json:"first_name" validate:"required"`
+	LastName  string `json:"last_name" validate:"required"`
+	OrgName   string `json:"org_name" validate:"required"`
+	OrgSlug   string `json:"org_slug" validate:"required"`
 }
 
 type LoginInput struct {
@@ -465,6 +467,91 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 
 func (s *AuthService) GetUser(ctx context.Context, userID uuid.UUID) (*models.User, error) {
 	return s.userRepo.FindByID(ctx, userID)
+}
+
+// MFAEnrollment is returned once, at enrollment time. The plaintext
+// secret and backup codes are never retrievable again — only their
+// encrypted/hashed forms are persisted.
+type MFAEnrollment struct {
+	Secret          string   `json:"secret"`
+	ProvisioningURI string   `json:"provisioning_uri"`
+	BackupCodes     []string `json:"backup_codes"`
+}
+
+// EnrollMFA generates a new TOTP secret and backup codes and stores them
+// (encrypted/hashed) against the user, but leaves MFAEnabled false until
+// ConfirmMFA proves the user actually has the secret loaded in an
+// authenticator app. Re-enrolling before confirming simply replaces the
+// pending secret.
+func (s *AuthService) EnrollMFA(ctx context.Context, userID uuid.UUID) (*MFAEnrollment, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	secret, err := security.GenerateTOTPSecret()
+	if err != nil {
+		return nil, err
+	}
+	encSecret, err := s.cipher.Encrypt(secret)
+	if err != nil {
+		return nil, err
+	}
+
+	codes, err := security.GenerateBackupCodes(10)
+	if err != nil {
+		return nil, err
+	}
+	hashedCodes := make([]string, len(codes))
+	for i, code := range codes {
+		h, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, err
+		}
+		hashedCodes[i] = string(h)
+	}
+	codesJSON, err := json.Marshal(hashedCodes)
+	if err != nil {
+		return nil, err
+	}
+
+	user.MFASecretEncrypted = &encSecret
+	user.MFABackupCodesHash = datatypes.JSON(codesJSON)
+	user.MFAEnabled = false // requires ConfirmMFA
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return &MFAEnrollment{
+		Secret:          secret,
+		ProvisioningURI: security.TOTPProvisioningURI(s.cfg.MFAIssuer, user.Email, secret),
+		BackupCodes:     codes,
+	}, nil
+}
+
+// ConfirmMFA proves the user's authenticator app is correctly loaded with
+// the pending secret before MFA actually gates future logins.
+func (s *AuthService) ConfirmMFA(ctx context.Context, userID uuid.UUID, code string) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return errors.New("user not found")
+	}
+	if user.MFASecretEncrypted == nil {
+		return errors.New("no pending mfa enrollment")
+	}
+
+	secret, err := s.cipher.Decrypt(*user.MFASecretEncrypted)
+	if err != nil {
+		return errors.New("could not verify mfa secret")
+	}
+	if !security.ValidateTOTP(secret, code) {
+		return errors.New("invalid verification code")
+	}
+
+	now := time.Now()
+	user.MFAEnabled = true
+	user.MFAEnrolledAt = &now
+	return s.userRepo.Update(ctx, user)
 }
 
 func (s *AuthService) generateTokens(user *models.User) (*AuthTokens, error) {
