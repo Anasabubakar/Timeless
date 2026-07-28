@@ -211,6 +211,9 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	integrations.Post("/:provider/connect", integrationHandler.Connect)
 	integrations.Patch("/notion/pages/:pageID", integrationHandler.PushNotionPage)
 
+	dedupeHandler := handler.NewDedupeHandler(db)
+	protected.Post("/companies/dedupe", dedupeHandler.MergeCompanies)
+
 	// OAuth (public: browser redirects can't carry auth headers)
 	oauthHandler := handler.NewOAuthHandler(cfg, rdb, integrationSvc)
 	api.Get("/integrations/oauth/callback", oauthHandler.Callback)
