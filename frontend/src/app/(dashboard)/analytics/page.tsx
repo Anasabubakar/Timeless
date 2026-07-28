@@ -16,7 +16,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { AreaChart, Area, BarChart, Bar, LineChart as ReLine, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { cn, formatCurrency, formatNumber } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import {
   useDashboardStats,
   usePipelineAnalytics,
@@ -26,6 +26,7 @@ import {
   useRecentActivity,
 } from "@/queries/analytics";
 import { useAuthStore } from "@/stores/auth";
+import CountUp from "@/components/ui/count-up";
 
 const stageLabels: Record<string, string> = {
   prospect: "Prospect",
@@ -104,14 +105,14 @@ export default function AnalyticsPage() {
   const maxFunnelCount = Math.max(...funnel.map((f) => f.count), 1);
 
   const kpiCards = [
-    { name: "Total Revenue", value: formatCurrency(stats?.total_revenue ?? 0), change: "+12.3%", positive: true },
-    { name: "Pipeline Value", value: formatCurrency(stats?.pipeline_value ?? 0), change: "+5.2%", positive: true },
-    { name: "Conversion Rate", value: `${(stats?.conversion_rate ?? 0).toFixed(1)}%`, change: "+2.1%", positive: true },
-    { name: "Win Rate", value: `${(stats?.win_rate ?? 0).toFixed(1)}%`, change: "+0.8%", positive: (stats?.win_rate ?? 0) > 0 },
-    { name: "Avg Deal Size", value: formatCurrency(stats?.avg_deal_size ?? 0), change: "+3.4%", positive: true },
-    { name: "Avg Velocity", value: `${stats?.avg_deal_velocity ?? 0}d`, change: "-2d", positive: false },
-    { name: "Deals Won", value: String(stats?.closed_won ?? 0), change: "+3", positive: true },
-    { name: "Active Campaigns", value: String(stats?.active_campaigns ?? 0), change: "+1", positive: true },
+    { name: "Total Revenue", value: stats?.total_revenue ?? 0, format: "currency" as const, change: "+12.3%", positive: true },
+    { name: "Pipeline Value", value: stats?.pipeline_value ?? 0, format: "currency" as const, change: "+5.2%", positive: true },
+    { name: "Conversion Rate", value: stats?.conversion_rate ?? 0, format: "percent" as const, change: "+2.1%", positive: true },
+    { name: "Win Rate", value: stats?.win_rate ?? 0, format: "percent" as const, change: "+0.8%", positive: (stats?.win_rate ?? 0) > 0 },
+    { name: "Avg Deal Size", value: stats?.avg_deal_size ?? 0, format: "currency" as const, change: "+3.4%", positive: true },
+    { name: "Avg Velocity", value: stats?.avg_deal_velocity ?? 0, format: "days" as const, change: "-2d", positive: false },
+    { name: "Deals Won", value: stats?.closed_won ?? 0, format: "number" as const, change: "+3", positive: true },
+    { name: "Active Campaigns", value: stats?.active_campaigns ?? 0, format: "number" as const, change: "+1", positive: true },
   ];
 
   return (
@@ -148,7 +149,24 @@ export default function AnalyticsPage() {
               <span className={cn("text-[10px] font-medium flex items-center gap-0.5", k.positive ? "text-emerald-500" : "text-red-400")}>{k.positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}{k.change}</span>
             </div>
             <div className="mt-2">
-              <span className="text-2xl font-semibold tracking-tight">{k.value}</span>
+              {k.format === "currency" ? (
+                <span className="inline-flex items-baseline text-2xl font-semibold tracking-tight">
+                  $
+                  <CountUp to={k.value} separator="," className="text-2xl font-semibold tracking-tight" />
+                </span>
+              ) : k.format === "percent" ? (
+                <span className="inline-flex items-baseline text-2xl font-semibold tracking-tight">
+                  <CountUp to={k.value} className="text-2xl font-semibold tracking-tight" />
+                  %
+                </span>
+              ) : k.format === "days" ? (
+                <span className="inline-flex items-baseline text-2xl font-semibold tracking-tight">
+                  <CountUp to={k.value} className="text-2xl font-semibold tracking-tight" />
+                  d
+                </span>
+              ) : (
+                <CountUp to={k.value} separator="," className="text-2xl font-semibold tracking-tight" />
+              )}
             </div>
           </div>
         ))}
@@ -353,15 +371,15 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-5">
           <p className="text-sm text-muted-foreground">Active Campaigns</p>
-          <p className="mt-1 text-3xl font-semibold">{stats?.active_campaigns ?? 0}</p>
+          <CountUp to={stats?.active_campaigns ?? 0} className="mt-1 block text-3xl font-semibold" />
         </div>
         <div className="rounded-xl border border-border bg-card p-5">
           <p className="text-sm text-muted-foreground">Deals Won</p>
-          <p className="mt-1 text-3xl font-semibold">{stats?.closed_won ?? 0}</p>
+          <CountUp to={stats?.closed_won ?? 0} className="mt-1 block text-3xl font-semibold" />
         </div>
         <div className="rounded-xl border border-border bg-card p-5">
           <p className="text-sm text-muted-foreground">Companies Tracked</p>
-          <p className="mt-1 text-3xl font-semibold">{stats?.total_companies ?? 0}</p>
+          <CountUp to={stats?.total_companies ?? 0} className="mt-1 block text-3xl font-semibold" />
         </div>
       </div>
     </div>
