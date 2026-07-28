@@ -139,16 +139,12 @@ export default function WorkspaceStepPage() {
                 From your Zapier account: MCP → create a server → copy the MCP Server URL.
               </p>
             </div>
-            <Button className="w-full" onClick={() => startOAuth("zapier")}>
-              Connect Zapier with OAuth
-            </Button>
             <Button
-              variant="outline"
               className="w-full"
               disabled={!zapierUrl || connecting === "zapier"}
               onClick={() => handleConnect("zapier", { mcp_server_url: zapierUrl })}
             >
-              {connecting === "zapier" ? "Connecting..." : "Connect with MCP Server URL"}
+              {connecting === "zapier" ? "Connecting..." : "Connect Zapier"}
             </Button>
           </CardContent>
         </Card>

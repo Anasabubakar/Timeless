@@ -30,10 +30,8 @@ type Config struct {
 	NotionClientSecret string `env:"NOTION_CLIENT_SECRET"`
 	ApolloClientID     string `env:"APOLLO_CLIENT_ID"`
 	ApolloClientSecret string `env:"APOLLO_CLIENT_SECRET"`
-	ZapierClientID     string `env:"ZAPIER_CLIENT_ID"`
-	ZapierClientSecret string `env:"ZAPIER_CLIENT_SECRET"`
-	ZapierAuthorizeURL string `env:"ZAPIER_AUTHORIZE_URL" envDefault:"https://mcp.zapier.com/oauth/authorize"`
-	ZapierTokenURL     string `env:"ZAPIER_TOKEN_URL" envDefault:"https://mcp.zapier.com/oauth/token"`
+	// Zapier has no OAuth app registration for third parties — it connects
+	// via a personal MCP Server URL instead (see integration/zapier.go).
 
 	OpenAIKey     string `env:"OPENAI_API_KEY"`
 	AnthropicKey  string `env:"ANTHROPIC_API_KEY"`

@@ -50,14 +50,10 @@ func NewOAuthHandler(cfg *config.Config, rdb *redis.Client, svc *service.Integra
 				TokenURL:      "https://app.apollo.io/api/v1/oauth/token",
 				CredentialKey: "access_token",
 			},
-			"zapier": {
-				Provider:      "zapier",
-				ClientID:      cfg.ZapierClientID,
-				ClientSecret:  cfg.ZapierClientSecret,
-				AuthorizeURL:  cfg.ZapierAuthorizeURL,
-				TokenURL:      cfg.ZapierTokenURL,
-				CredentialKey: "access_token",
-			},
+			// Zapier MCP has no third-party OAuth app registration — it only
+			// supports a user generating their own personal MCP Server URL
+			// at mcp.zapier.com and pasting it in (see integration/zapier.go).
+			// Intentionally not registered here.
 		},
 	}
 }
