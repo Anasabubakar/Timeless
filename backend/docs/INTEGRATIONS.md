@@ -82,3 +82,19 @@ encrypted under. Rotating `CREDENTIALS_ENCRYPTION_KEY`:
 Skipping step 3 doesn't break anything immediately — `Decrypt` still finds
 the old key in the previous-keys list — but the org stays on a retired key
 until rotation is completed.
+
+## Zapier: agentic vs. classic mode
+
+A user's Zapier MCP server (`mcp.zapier.com`) runs in one of two modes:
+
+- **Classic mode**: every enabled action is its own MCP tool, discoverable
+  only via `tools/list`. `groupToolsByApp` infers the source app from each
+  tool name's prefix (a heuristic — Zapier doesn't document a slug format).
+- **Agentic mode (beta)**: a small fixed set of meta-tools —
+  `list_enabled_zapier_actions`, `discover_zapier_actions`,
+  `execute_zapier_read_action`, `execute_zapier_write_action` — give real
+  structured discovery instead of name-parsing.
+
+`ZapierClient.DiscoverApps` tries agentic mode first and falls back to
+classic-mode grouping automatically; `SyncResult.Details["mode"]` records
+which one was actually used.
