@@ -28,7 +28,26 @@ func (m *AuthMiddleware) Handle(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "invalid authorization format")
 	}
 
-	token, err := jwt.Parse(parts[1], func(t *jwt.Token) (interface{}, error) {
+	return m.authenticate(c, parts[1])
+}
+
+// HandleWS authenticates the WebSocket upgrade route. Browsers can't attach
+// an Authorization header to a WebSocket handshake, so the frontend sends
+// the token as a query param instead (`/ws?token=...`) — this is the WS
+// equivalent of Handle, reading from the query string rather than the
+// header. Without this, every WebSocket connection was rejected with 401
+// immediately after opening, and the client reconnected every 3 seconds
+// forever.
+func (m *AuthMiddleware) HandleWS(c fiber.Ctx) error {
+	token := c.Query("token")
+	if token == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "missing token query param")
+	}
+	return m.authenticate(c, token)
+}
+
+func (m *AuthMiddleware) authenticate(c fiber.Ctx, tokenString string) error {
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fiber.NewError(fiber.StatusUnauthorized, "invalid signing method")
 		}

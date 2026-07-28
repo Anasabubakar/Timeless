@@ -391,7 +391,11 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	// Realtime (WebSocket + SSE)
 	hub := realtime.NewHub()
 	go hub.Run()
-	app.Get("/ws", authMw.Handle, tenantMw.Handle, hub.WebSocketHandler())
+	// A dedicated Group (not handlers passed directly to Get) so
+	// c.Locals set by authMw.HandleWS is reliably visible to tenantMw —
+	// matching the exact pattern already proven for `protected` above.
+	ws := app.Group("", authMw.HandleWS, tenantMw.Handle)
+	ws.Get("/ws", hub.WebSocketHandler())
 	protected.Get("/events", hub.SSEHandler())
 
 	// Notifications
