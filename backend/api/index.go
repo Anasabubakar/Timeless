@@ -72,6 +72,10 @@ func initApp() {
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  30 * time.Second,
 		BodyLimit:    10 * 1024 * 1024,
+		// See cmd/api/main.go for why Concurrency is set explicitly;
+		// lower here since each serverless invocation has less memory/CPU
+		// to work with than the standalone binary.
+		Concurrency:  4096,
 		ErrorHandler: globalErrorHandler,
 	})
 

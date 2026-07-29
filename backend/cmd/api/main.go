@@ -54,6 +54,13 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
 		BodyLimit:    10 * 1024 * 1024,
+		// Concurrency bounds simultaneous in-flight connections. fasthttp's
+		// default (256*1024) is effectively unlimited for a single small
+		// instance — a slow-loris-style flood could open connections far
+		// past what the process/DB pool can actually service before any
+		// per-route rate limit even gets a chance to run. This is a coarse
+		// backstop underneath RedisRateLimiter, not a replacement for it.
+		Concurrency:  16384,
 		ErrorHandler: globalErrorHandler,
 	})
 
