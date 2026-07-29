@@ -19,6 +19,24 @@ func RateLimitLogin() RateLimitConfig {
 	return RateLimitConfig{Name: "login", Limit: 20, Window: 5 * time.Minute, Burst: 6, BurstWindow: 10 * time.Second, KeyFunc: ByIP}
 }
 
+// RateLimitLoginByAccount catches distributed credential stuffing —
+// many IPs, one targeted account — that RateLimitLogin's IP-keyed limit
+// can't see. Looser than the per-account lockout in AuthService (which
+// already locks the account after a handful of failures); this exists
+// specifically so an attacker spreading attempts across IPs to dodge
+// RateLimitLogin still hits a ceiling tied to the account they're after.
+func RateLimitLoginByAccount() RateLimitConfig {
+	return RateLimitConfig{Name: "login_account", Limit: 15, Window: 15 * time.Minute, KeyFunc: ByBodyEmail}
+}
+
+func RateLimitPasswordResetByAccount() RateLimitConfig {
+	return RateLimitConfig{Name: "password_reset_account", Limit: 5, Window: time.Hour, KeyFunc: ByBodyEmail}
+}
+
+func RateLimitEmailVerificationByAccount() RateLimitConfig {
+	return RateLimitConfig{Name: "email_verification_account", Limit: 5, Window: time.Hour, KeyFunc: ByBodyEmail}
+}
+
 func RateLimitMFAVerify() RateLimitConfig {
 	return RateLimitConfig{Name: "mfa_verify", Limit: 15, Window: 5 * time.Minute, Burst: 5, BurstWindow: 10 * time.Second, KeyFunc: ByIP}
 }

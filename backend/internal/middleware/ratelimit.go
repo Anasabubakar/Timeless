@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -165,6 +166,24 @@ func ByUser(c fiber.Ctx) string {
 func ByOrg(c fiber.Ctx) string {
 	if orgID, ok := c.Locals("org_id").(string); ok && orgID != "" {
 		return "org:" + orgID
+	}
+	return "ip:" + c.IP()
+}
+
+// ByBodyEmail limits per the "email" field in the JSON request body —
+// for public, unauthenticated endpoints (login, forgot-password,
+// resend-verification) where an IP-only limit can be dodged by
+// distributing attempts across many IPs against one target account.
+// fasthttp buffers the whole body in memory, so peeking at it here
+// doesn't consume it — the handler still reads it normally afterward.
+// Falls back to IP if the body doesn't parse or has no email, so a
+// malformed request still gets *some* limit applied.
+func ByBodyEmail(c fiber.Ctx) string {
+	var body struct {
+		Email string `json:"email"`
+	}
+	if err := json.Unmarshal(c.Body(), &body); err == nil && body.Email != "" {
+		return "email:" + strings.ToLower(strings.TrimSpace(body.Email))
 	}
 	return "ip:" + c.IP()
 }
