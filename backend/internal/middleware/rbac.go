@@ -38,15 +38,9 @@ func (m *RBACMiddleware) Require(permissions ...string) fiber.Handler {
 			return fiber.NewError(fiber.StatusInternalServerError, "failed to resolve permissions")
 		}
 
-		if slices.Contains(userPerms, "*") {
-			return c.Next()
-		}
-
-		for _, required := range permissions {
-			if !slices.Contains(userPerms, required) {
-				m.logDenial(c, userID, orgID, required)
-				return fiber.NewError(fiber.StatusForbidden, "insufficient permissions: "+required)
-			}
+		if missing, ok := satisfiesAll(userPerms, permissions); !ok {
+			m.logDenial(c, userID, orgID, missing)
+			return fiber.NewError(fiber.StatusForbidden, "insufficient permissions: "+missing)
 		}
 
 		return c.Next()
@@ -70,19 +64,44 @@ func (m *RBACMiddleware) RequireAny(permissions ...string) fiber.Handler {
 			return fiber.NewError(fiber.StatusInternalServerError, "failed to resolve permissions")
 		}
 
-		if slices.Contains(userPerms, "*") {
-			return c.Next()
+		if !satisfiesAny(userPerms, permissions) {
+			m.logDenial(c, userID, orgID, strings.Join(permissions, " or "))
+			return fiber.NewError(fiber.StatusForbidden, "insufficient permissions")
 		}
 
-		for _, required := range permissions {
-			if slices.Contains(userPerms, required) {
-				return c.Next()
-			}
-		}
-
-		m.logDenial(c, userID, orgID, strings.Join(permissions, " or "))
-		return fiber.NewError(fiber.StatusForbidden, "insufficient permissions")
+		return c.Next()
 	}
+}
+
+// satisfiesAll reports whether userPerms grants every permission in
+// required (or the "*" wildcard). On failure it also returns the first
+// permission that was missing, for error messages/audit logging.
+func satisfiesAll(userPerms, required []string) (missing string, ok bool) {
+	if slices.Contains(userPerms, PermAll) {
+		return "", true
+	}
+	for _, perm := range required {
+		if !slices.Contains(userPerms, perm) {
+			return perm, false
+		}
+	}
+	return "", true
+}
+
+// satisfiesAny reports whether userPerms grants at least one permission
+// in required (or the "*" wildcard). An empty required list is
+// vacuously unsatisfied — RequireAny with no arguments is a
+// configuration mistake, not an open door.
+func satisfiesAny(userPerms, required []string) bool {
+	if slices.Contains(userPerms, PermAll) {
+		return true
+	}
+	for _, perm := range required {
+		if slices.Contains(userPerms, perm) {
+			return true
+		}
+	}
+	return false
 }
 
 // logDenial records a permission-denied security event. Async (like
@@ -124,7 +143,7 @@ func (m *RBACMiddleware) HasPermission(userID, orgID uuid.UUID, permission strin
 	if err != nil {
 		return false, err
 	}
-	return slices.Contains(perms, "*") || slices.Contains(perms, permission), nil
+	return satisfiesAny(perms, []string{permission}), nil
 }
 
 func (m *RBACMiddleware) getUserPermissions(userID, orgID uuid.UUID) ([]string, error) {
