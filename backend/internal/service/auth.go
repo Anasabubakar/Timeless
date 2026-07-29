@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ type AuthService struct {
 	sessionRepo     *repository.SessionRepository
 	emailVerifyRepo *repository.EmailVerificationRepository
 	resetRepo       *repository.PasswordResetRepository
+	roleRepo        *repository.RoleRepository
 	cfg             *config.Config
 	rdb             *redis.Client
 	mailer          *email.Sender
@@ -44,6 +46,7 @@ func NewAuthService(
 	sessionRepo *repository.SessionRepository,
 	emailVerifyRepo *repository.EmailVerificationRepository,
 	resetRepo *repository.PasswordResetRepository,
+	roleRepo *repository.RoleRepository,
 	cfg *config.Config,
 	rdb *redis.Client,
 	mailer *email.Sender,
@@ -54,6 +57,7 @@ func NewAuthService(
 		sessionRepo:     sessionRepo,
 		emailVerifyRepo: emailVerifyRepo,
 		resetRepo:       resetRepo,
+		roleRepo:        roleRepo,
 		cfg:             cfg,
 		rdb:             rdb,
 		mailer:          mailer,
@@ -173,6 +177,19 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 	}
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, nil, err
+	}
+
+	// The registering user becomes the org's Owner. This must succeed —
+	// unlike the best-effort email send below, an account created
+	// without a role would have zero permissions and (with RBAC enforced
+	// on routes) be locked out of the organization it just created, so a
+	// failure here fails registration rather than leaving a broken account.
+	ownerRoleID, err := s.roleRepo.SeedDefaultRoles(ctx, org.ID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to provision organization roles: %w", err)
+	}
+	if err := s.roleRepo.AssignRole(ctx, user.ID, ownerRoleID); err != nil {
+		return nil, nil, fmt.Errorf("failed to assign owner role: %w", err)
 	}
 
 	s.issueEmailVerification(ctx, user)

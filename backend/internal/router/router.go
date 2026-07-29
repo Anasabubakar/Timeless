@@ -56,9 +56,10 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	sessionRepo := repository.NewSessionRepository(db)
 	emailVerifyRepo := repository.NewEmailVerificationRepository(db)
 	passwordResetRepo := repository.NewPasswordResetRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
 
 	// Services
-	authSvc := service.NewAuthService(userRepo, orgRepo, sessionRepo, emailVerifyRepo, passwordResetRepo, cfg, rdb, emailSender)
+	authSvc := service.NewAuthService(userRepo, orgRepo, sessionRepo, emailVerifyRepo, passwordResetRepo, roleRepo, cfg, rdb, emailSender)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authSvc)
