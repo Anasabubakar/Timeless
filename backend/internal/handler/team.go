@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -9,14 +10,30 @@ import (
 
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/repository"
 )
 
+// ownerRoleName must match the "Owner" system role seeded by
+// RoleRepository.SeedDefaultRoles.
+const ownerRoleName = "Owner"
+
 type TeamHandler struct {
-	db *gorm.DB
+	db       *gorm.DB
+	roleRepo *repository.RoleRepository
 }
 
-func NewTeamHandler(db *gorm.DB) *TeamHandler {
-	return &TeamHandler{db: db}
+func NewTeamHandler(db *gorm.DB, roleRepo *repository.RoleRepository) *TeamHandler {
+	return &TeamHandler{db: db, roleRepo: roleRepo}
+}
+
+// hasRole reports whether user currently holds the named role.
+func (h *TeamHandler) hasRole(user *models.User, roleName string) bool {
+	for _, r := range user.Roles {
+		if r.Name == roleName {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *TeamHandler) ListMembers(c fiber.Ctx) error {
@@ -123,8 +140,19 @@ func (h *TeamHandler) UpdateMemberRole(c fiber.Ctx) error {
 	}
 
 	var user models.User
-	if err := h.db.Where("id = ? AND organization_id = ?", memberID, orgID).First(&user).Error; err != nil {
+	if err := h.db.Preload("Roles", "organization_id = ?", orgID).
+		Where("id = ? AND organization_id = ?", memberID, orgID).First(&user).Error; err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "member not found")
+	}
+
+	if h.hasRole(&user, ownerRoleName) && !slices.Contains(input.Roles, ownerRoleName) {
+		remaining, err := h.roleRepo.CountUsersWithRole(c.Context(), orgID, ownerRoleName, memberID)
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to verify ownership")
+		}
+		if remaining == 0 {
+			return fiber.NewError(fiber.StatusBadRequest, "cannot remove Owner from the organization's last owner")
+		}
 	}
 
 	h.db.Exec("DELETE FROM user_roles WHERE user_id = ?", memberID)
@@ -149,6 +177,22 @@ func (h *TeamHandler) RemoveMember(c fiber.Ctx) error {
 
 	if memberID == userID {
 		return fiber.NewError(fiber.StatusBadRequest, "cannot remove yourself")
+	}
+
+	var member models.User
+	if err := h.db.Preload("Roles", "organization_id = ?", orgID).
+		Where("id = ? AND organization_id = ?", memberID, orgID).First(&member).Error; err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "member not found")
+	}
+
+	if h.hasRole(&member, ownerRoleName) {
+		remaining, err := h.roleRepo.CountUsersWithRole(c.Context(), orgID, ownerRoleName, memberID)
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to verify ownership")
+		}
+		if remaining == 0 {
+			return fiber.NewError(fiber.StatusBadRequest, "cannot remove the organization's last owner")
+		}
 	}
 
 	result := h.db.Where("id = ? AND organization_id = ?", memberID, orgID).Delete(&models.User{})

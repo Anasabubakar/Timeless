@@ -394,7 +394,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	protected.Post("/contacts/batch/delete", batchHandler.BatchDelete("contacts"))
 
 	// Team Management
-	teamHandler := handler.NewTeamHandler(db)
+	teamHandler := handler.NewTeamHandler(db, roleRepo)
 	team := protected.Group("/team")
 	team.Get("/members", teamHandler.ListMembers)
 	team.Post("/members", teamHandler.InviteMember)
