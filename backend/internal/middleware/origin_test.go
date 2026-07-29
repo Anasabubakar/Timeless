@@ -46,3 +46,38 @@ func TestValidateOrigin(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateOriginAlways(t *testing.T) {
+	allowed := []string{"https://app.timeless.example"}
+
+	cases := []struct {
+		name       string
+		origin     string
+		wantStatus int
+	}{
+		{"GET with no Origin passes (WS upgrades from native clients)", "", 200},
+		{"GET with an allowed origin passes", "https://app.timeless.example", 200},
+		{"GET with a disallowed origin is rejected — unlike ValidateOrigin, GET is checked here", "https://evil.example", 403},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := fiber.New()
+			app.Get("/ws", func(c fiber.Ctx) error {
+				return c.SendString("ok")
+			}, ValidateOriginAlways(allowed))
+
+			req := httptest.NewRequest("GET", "/ws", nil)
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
+			}
+		})
+	}
+}

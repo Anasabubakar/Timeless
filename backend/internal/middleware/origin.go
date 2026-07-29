@@ -6,6 +6,20 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+// checkOrigin is the shared decision: a present-but-disallowed Origin
+// is rejected; a missing Origin (server-to-server calls, mobile apps,
+// curl/Postman — none of which are a CSRF-relevant threat model, since
+// this API has no cookie-based session for a browser to
+// forge-and-auto-attach and auth is a bearer token a forged
+// cross-origin request would never have access to) is allowed through.
+func checkOrigin(c fiber.Ctx, allowedOrigins []string) error {
+	origin := c.Get(fiber.HeaderOrigin)
+	if origin == "" || slices.Contains(allowedOrigins, origin) {
+		return nil
+	}
+	return fiber.NewError(fiber.StatusForbidden, "request origin not allowed")
+}
+
 // ValidateOrigin rejects state-changing (POST/PUT/PATCH/DELETE)
 // requests whose Origin header is present but doesn't match one of the
 // configured allowed origins. This is deliberately independent of CORS:
@@ -16,13 +30,6 @@ import (
 // older browser, or a non-browser HTTP client crafting the header
 // itself. This gives the server its own opinion instead of trusting the
 // browser to have enforced one.
-//
-// A request with NO Origin header at all is allowed through — that's
-// the normal shape for server-to-server calls, mobile apps, and tools
-// like curl/Postman, none of which are a CSRF-relevant threat model
-// (this API has no cookie-based session for a browser to
-// forge-and-auto-attach in the first place; auth is a bearer token a
-// forged cross-origin request would never have access to).
 func ValidateOrigin(allowedOrigins []string) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		switch c.Method() {
@@ -30,16 +37,23 @@ func ValidateOrigin(allowedOrigins []string) fiber.Handler {
 		default:
 			return c.Next()
 		}
-
-		origin := c.Get(fiber.HeaderOrigin)
-		if origin == "" {
-			return c.Next()
+		if err := checkOrigin(c, allowedOrigins); err != nil {
+			return err
 		}
+		return c.Next()
+	}
+}
 
-		if !slices.Contains(allowedOrigins, origin) {
-			return fiber.NewError(fiber.StatusForbidden, "request origin not allowed")
+// ValidateOriginAlways is ValidateOrigin without the method allowlist —
+// for routes like the WebSocket upgrade, which is always a GET but
+// establishes a stateful, long-lived connection unlike a normal safe
+// GET, so it doesn't fit ValidateOrigin's "only check state-changing
+// methods" scoping.
+func ValidateOriginAlways(allowedOrigins []string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if err := checkOrigin(c, allowedOrigins); err != nil {
+			return err
 		}
-
 		return c.Next()
 	}
 }

@@ -428,7 +428,14 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	// A dedicated Group (not handlers passed directly to Get) so
 	// c.Locals set by authMw.HandleWS is reliably visible to tenantMw —
 	// matching the exact pattern already proven for `protected` above.
-	ws := app.Group("", authMw.HandleWS, tenantMw.Handle)
+	// WebSocket upgrades aren't subject to CORS/SOP the way a normal
+	// fetch() is — a page on any origin can attempt to open one. This
+	// app's token-in-query-param auth means an attacker's page can't
+	// silently attach a victim's credentials the way a cookie-based app
+	// would be at risk of (that's the actual CSWSH threat model), but
+	// checking Origin on the upgrade is a cheap additional layer
+	// consistent with the rest of the API.
+	ws := app.Group("", authMw.HandleWS, middleware.ValidateOriginAlways(cfg.CORSOrigins()), tenantMw.Handle)
 	ws.Get("/ws", hub.WebSocketHandler())
 	protected.Get("/events", hub.SSEHandler())
 
