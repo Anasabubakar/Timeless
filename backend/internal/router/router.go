@@ -84,7 +84,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	auditMw := middleware.AuditLog(middleware.AuditConfig{DB: db})
 	rbacMw := middleware.NewRBAC(db)
 	routeGuard := middleware.NewRouteGuard(rbacMw)
-	protected := api.Group("", authMw.Handle, tenantMw.Handle, auditMw, routeGuard.Handle)
+	protected := api.Group("", authMw.Handle, rl.Limit(middleware.RateLimitAPI()), tenantMw.Handle, auditMw, routeGuard.Handle)
 
 	// Auth (protected)
 	protected.Post("/auth/logout", authHandler.Logout)
@@ -320,7 +320,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	learningService := agent.NewLearningService(db)
 	orchestrator := agent.NewOrchestrator(registry, learningService)
 	aiHandler := handler.NewAIHandler(orchestrator)
-	ai := protected.Group("/ai")
+	ai := protected.Group("/ai", rl.Limit(middleware.RateLimitAIPerUser()), rl.Limit(middleware.RateLimitAIPerOrg()))
 	ai.Post("/query", aiHandler.Query)
 	ai.Get("/agents", aiHandler.ListAgents)
 
@@ -338,11 +338,12 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	goalSvc := service.NewGoalService(orchestrator)
 	automationPlanSvc := service.NewAutomationPlanService(orchestrator, automationRepo)
 	discoveryHandler := handler.NewDiscoveryHandler(discoverySvc, goalSvc, automationPlanSvc)
-	protected.Post("/onboarding/discovery/run", discoveryHandler.RunDiscovery)
-	protected.Post("/onboarding/discovery/select", discoveryHandler.SelectProjects)
-	protected.Post("/onboarding/goals/recommend", discoveryHandler.RecommendGoals)
-	protected.Post("/onboarding/goals/plan", discoveryHandler.PlanAutomation)
-	protected.Post("/onboarding/goals/approve", discoveryHandler.ApproveAutomation)
+	aiOnboardingLimits := []fiber.Handler{rl.Limit(middleware.RateLimitAIPerUser()), rl.Limit(middleware.RateLimitAIPerOrg())}
+	protected.Post("/onboarding/discovery/run", discoveryHandler.RunDiscovery, aiOnboardingLimits...)
+	protected.Post("/onboarding/discovery/select", discoveryHandler.SelectProjects, aiOnboardingLimits...)
+	protected.Post("/onboarding/goals/recommend", discoveryHandler.RecommendGoals, aiOnboardingLimits...)
+	protected.Post("/onboarding/goals/plan", discoveryHandler.PlanAutomation, aiOnboardingLimits...)
+	protected.Post("/onboarding/goals/approve", discoveryHandler.ApproveAutomation, aiOnboardingLimits...)
 
 	// Knowledge Graph & Semantic Search
 	var embedder provider.Embedder
