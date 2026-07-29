@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"slices"
 
 	"github.com/gofiber/fiber/v3"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/pkg/reqbind"
 	"github.com/timeless/backend/internal/repository"
 )
 
@@ -125,8 +127,8 @@ func (h *TeamHandler) InviteMember(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
 
 	var input InviteMemberInput
-	if err := c.Bind().JSON(&input); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
 
 	if input.Role == ownerRoleName {
@@ -144,6 +146,16 @@ func (h *TeamHandler) InviteMember(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusConflict, "user already exists in this organization")
 	}
 
+	// Resolve the role before creating the user — previously an
+	// unrecognized role name was silently swallowed (the lookup's error
+	// was ignored) and the invite would still succeed with the new user
+	// left holding zero roles/permissions, with nothing in the response
+	// indicating anything had gone wrong.
+	var role models.Role
+	if err := h.db.Where("organization_id = ? AND name = ?", orgID, input.Role).First(&role).Error; err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "unknown role: "+input.Role)
+	}
+
 	user := models.User{
 		OrganizationID: orgID,
 		Email:          input.Email,
@@ -157,9 +169,8 @@ func (h *TeamHandler) InviteMember(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create user")
 	}
 
-	var role models.Role
-	if err := h.db.Where("organization_id = ? AND name = ?", orgID, input.Role).First(&role).Error; err == nil {
-		h.db.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?) ON CONFLICT DO NOTHING", user.ID, role.ID)
+	if err := h.db.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?) ON CONFLICT DO NOTHING", user.ID, role.ID).Error; err != nil {
+		log.Printf("team: failed to assign role %s to invited user %s: %v", role.Name, user.ID, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"data": user})
@@ -177,8 +188,8 @@ func (h *TeamHandler) UpdateMemberRole(c fiber.Ctx) error {
 	}
 
 	var input UpdateMemberRoleInput
-	if err := c.Bind().JSON(&input); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
 
 	var user models.User
