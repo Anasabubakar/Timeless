@@ -3,8 +3,10 @@ package router
 import (
 	"log"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/timeout"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
@@ -23,6 +25,14 @@ import (
 	"github.com/timeless/backend/internal/storage"
 	"github.com/timeless/backend/internal/worker"
 )
+
+// aiRequestTimeout bounds how long a single AI-provider-calling request
+// can run. Without it, a hung upstream provider call is only ever
+// bounded by the connection-level WriteTimeout (10-30s depending on
+// entrypoint) — fine for most routes, but generous enough that an AI
+// call could tie up a handler goroutine for the practical duration of
+// that timeout on every request, compounding under load.
+const aiRequestTimeout = 45 * time.Second
 
 func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerClient *worker.Client) {
 	// Health check
@@ -227,7 +237,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	proposals := protected.Group("/proposals", middleware.MaxBodySize(256*1024))
 	proposals.Get("/", proposalHandler.List)
 	proposals.Post("/", proposalHandler.Create)
-	proposals.Post("/generate", proposalHandler.Generate)
+	proposals.Post("/generate", timeout.New(proposalHandler.Generate, aiRequestTimeout))
 	proposals.Get("/:id", proposalHandler.Get)
 	proposals.Patch("/:id", proposalHandler.Update)
 	proposals.Delete("/:id", proposalHandler.Delete)
@@ -321,7 +331,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	orchestrator := agent.NewOrchestrator(registry, learningService)
 	aiHandler := handler.NewAIHandler(orchestrator)
 	ai := protected.Group("/ai", rl.Limit(middleware.RateLimitAIPerUser()), rl.Limit(middleware.RateLimitAIPerOrg()))
-	ai.Post("/query", aiHandler.Query)
+	ai.Post("/query", timeout.New(aiHandler.Query, aiRequestTimeout))
 	ai.Get("/agents", aiHandler.ListAgents)
 
 	// AI Learning & Feedback
@@ -339,11 +349,11 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	automationPlanSvc := service.NewAutomationPlanService(orchestrator, automationRepo)
 	discoveryHandler := handler.NewDiscoveryHandler(discoverySvc, goalSvc, automationPlanSvc)
 	aiOnboardingLimits := []fiber.Handler{rl.Limit(middleware.RateLimitAIPerUser()), rl.Limit(middleware.RateLimitAIPerOrg())}
-	protected.Post("/onboarding/discovery/run", discoveryHandler.RunDiscovery, aiOnboardingLimits...)
-	protected.Post("/onboarding/discovery/select", discoveryHandler.SelectProjects, aiOnboardingLimits...)
-	protected.Post("/onboarding/goals/recommend", discoveryHandler.RecommendGoals, aiOnboardingLimits...)
-	protected.Post("/onboarding/goals/plan", discoveryHandler.PlanAutomation, aiOnboardingLimits...)
-	protected.Post("/onboarding/goals/approve", discoveryHandler.ApproveAutomation, aiOnboardingLimits...)
+	protected.Post("/onboarding/discovery/run", timeout.New(discoveryHandler.RunDiscovery, aiRequestTimeout), aiOnboardingLimits...)
+	protected.Post("/onboarding/discovery/select", timeout.New(discoveryHandler.SelectProjects, aiRequestTimeout), aiOnboardingLimits...)
+	protected.Post("/onboarding/goals/recommend", timeout.New(discoveryHandler.RecommendGoals, aiRequestTimeout), aiOnboardingLimits...)
+	protected.Post("/onboarding/goals/plan", timeout.New(discoveryHandler.PlanAutomation, aiRequestTimeout), aiOnboardingLimits...)
+	protected.Post("/onboarding/goals/approve", timeout.New(discoveryHandler.ApproveAutomation, aiRequestTimeout), aiOnboardingLimits...)
 
 	// Knowledge Graph & Semantic Search
 	var embedder provider.Embedder
