@@ -2,7 +2,11 @@ package handler
 
 import (
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/timeless/backend/internal/ai/agent"
+	"github.com/timeless/backend/internal/logging"
+	"github.com/timeless/backend/internal/middleware"
+	"github.com/timeless/backend/internal/pkg/reqbind"
 )
 
 type AIHandler struct {
@@ -13,27 +17,33 @@ func NewAIHandler(orch *agent.Orchestrator) *AIHandler {
 	return &AIHandler{orchestrator: orch}
 }
 
+// AIQueryRequest.Query is capped at 8000 characters — generous for any
+// legitimate research/qualification question, but bounded so a single
+// request can't balloon token cost or use the query field itself as an
+// oversized injection surface. CampaignID/SponsorID/CompanyID are
+// validated as UUIDs since they're used to scope which org records the
+// agent can reference.
 type AIQueryRequest struct {
-	Query      string `json:"query" validate:"required"`
+	Query      string `json:"query" validate:"required,max=8000"`
 	AgentType  string `json:"agent_type,omitempty"`
-	CampaignID string `json:"campaign_id,omitempty"`
-	SponsorID  string `json:"sponsor_id,omitempty"`
-	CompanyID  string `json:"company_id,omitempty"`
+	CampaignID string `json:"campaign_id,omitempty" validate:"omitempty,uuid"`
+	SponsorID  string `json:"sponsor_id,omitempty" validate:"omitempty,uuid"`
+	CompanyID  string `json:"company_id,omitempty" validate:"omitempty,uuid"`
 }
 
 func (h *AIHandler) Query(c fiber.Ctx) error {
 	var req AIQueryRequest
-	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+	if verr := reqbind.JSON(c, &req); verr != nil {
+		return verr
 	}
 
-	orgID := c.Locals("org_id").(string)
-	userID := c.Locals("user_id").(string)
+	orgID := middleware.GetOrgID(c)
+	userID := middleware.GetUserID(c)
 
 	input := &agent.Input{
 		Query:      req.Query,
-		OrgID:      orgID,
-		UserID:     userID,
+		OrgID:      orgID.String(),
+		UserID:     userID.String(),
 		CampaignID: req.CampaignID,
 		SponsorID:  req.SponsorID,
 		CompanyID:  req.CompanyID,
@@ -45,21 +55,23 @@ func (h *AIHandler) Query(c fiber.Ctx) error {
 	} else {
 		routed, err := h.orchestrator.Route(c.Context(), input)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "routing failed"})
+			logging.Printf("ai: routing failed for org %s: %v", orgID, err)
+			return fiber.NewError(fiber.StatusInternalServerError, "routing failed")
 		}
 		agentType = routed
 	}
 
 	output, err := h.orchestrator.Execute(c.Context(), agentType, input)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		logging.Printf("ai: query failed for org %s agent %s: %v", orgID, agentType, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "AI query failed")
 	}
 
 	return c.JSON(fiber.Map{
-		"agent":      string(agentType),
-		"response":   output.Response,
-		"data":       output.Data,
-		"actions":    output.Actions,
+		"agent":       string(agentType),
+		"response":    output.Response,
+		"data":        output.Data,
+		"actions":     output.Actions,
 		"tokens_used": output.TokensUsed,
 	})
 }
