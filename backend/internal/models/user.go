@@ -9,17 +9,23 @@ import (
 
 type User struct {
 	Base
-	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index" json:"organization_id"`
-	Email          string         `gorm:"size:255;not null" json:"email"`
-	PasswordHash   *string        `gorm:"size:255" json:"-"`
-	FirstName      string         `gorm:"size:100;not null" json:"first_name"`
-	LastName       string         `gorm:"size:100;not null" json:"last_name"`
-	AvatarURL      *string        `gorm:"type:text" json:"avatar_url,omitempty"`
-	Phone          *string        `gorm:"size:50" json:"phone,omitempty"`
-	JobTitle       *string        `gorm:"size:255" json:"job_title,omitempty"`
-	Status         string         `gorm:"size:20;not null;default:active" json:"status"`
-	LastLoginAt    *time.Time     `json:"last_login_at,omitempty"`
-	Preferences    datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"preferences"`
+	OrganizationID uuid.UUID `gorm:"type:uuid;not null;index" json:"organization_id"`
+	// Email had no index at all despite being the lookup key for every
+	// single login attempt (UserRepository.FindByEmail) — a full table
+	// scan on every login. Not unique here: Register's "already
+	// registered" check is global, but InviteMember's uniqueness check
+	// is scoped per-org, so the existing mixed semantics are preserved
+	// rather than redesigned as part of an indexing fix.
+	Email        string         `gorm:"size:255;not null;index" json:"email"`
+	PasswordHash *string        `gorm:"size:255" json:"-"`
+	FirstName    string         `gorm:"size:100;not null" json:"first_name"`
+	LastName     string         `gorm:"size:100;not null" json:"last_name"`
+	AvatarURL    *string        `gorm:"type:text" json:"avatar_url,omitempty"`
+	Phone        *string        `gorm:"size:50" json:"phone,omitempty"`
+	JobTitle     *string        `gorm:"size:255" json:"job_title,omitempty"`
+	Status       string         `gorm:"size:20;not null;default:active" json:"status"`
+	LastLoginAt  *time.Time     `json:"last_login_at,omitempty"`
+	Preferences  datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"preferences"`
 
 	// Email verification. New accounts start unverified; Status stays
 	// "active" so existing login/session logic is unaffected, but
