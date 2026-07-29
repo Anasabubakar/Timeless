@@ -88,6 +88,12 @@ func (h *ProposalHandler) Update(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
+	// Same re-pin as CompanyHandler/ContactHandler.Update: Update() saves
+	// by primary key with no org check, so a client-supplied
+	// "organization_id" in the body would otherwise move this proposal
+	// into a different tenant's org.
+	proposal.OrganizationID = orgID
+	proposal.ID = id
 	if err := h.svc.Update(c.Context(), proposal); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to update proposal")
 	}

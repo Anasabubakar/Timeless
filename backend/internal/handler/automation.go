@@ -74,6 +74,12 @@ func (h *AutomationHandler) Update(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
+	// Update() saves by primary key with no org check (see
+	// repository.AutomationRepository.Update) — re-pin after the bind so
+	// a client-supplied "organization_id" can't move this automation
+	// into a different tenant's org.
+	automation.OrganizationID = orgID
+	automation.ID = id
 	if err := h.svc.Update(c.Context(), automation); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to update automation")
 	}

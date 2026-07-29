@@ -31,9 +31,9 @@ func (h *ContactHandler) List(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"data":  contacts,
-		"total": total,
-		"limit": limit,
+		"data":   contacts,
+		"total":  total,
+		"limit":  limit,
 		"offset": offset,
 	})
 }
@@ -85,6 +85,12 @@ func (h *ContactHandler) Update(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
+	// Update() saves by primary key alone with no org-scoping (see
+	// repository.ContactRepository.Update) — without re-pinning these
+	// after the bind, a client could include "organization_id" in the
+	// body and move this contact into a different tenant's org entirely.
+	contact.OrganizationID = orgID
+	contact.ID = id
 	if err := h.svc.Update(c.Context(), contact); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to update contact")
 	}
