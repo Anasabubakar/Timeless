@@ -41,6 +41,15 @@ func RateLimitMFAVerify() RateLimitConfig {
 	return RateLimitConfig{Name: "mfa_verify", Limit: 15, Window: 5 * time.Minute, Burst: 5, BurstWindow: 10 * time.Second, KeyFunc: ByIP}
 }
 
+// RateLimitMFAManage covers the authenticated MFA confirm/disable
+// endpoints, both of which are effectively "guess a 6-digit code" or
+// "guess my own password" surfaces once a session is already
+// hijacked/shared — the broad RateLimitAPI safety net (600/min) is far
+// too loose to meaningfully slow either kind of guessing down.
+func RateLimitMFAManage() RateLimitConfig {
+	return RateLimitConfig{Name: "mfa_manage", Limit: 10, Window: 5 * time.Minute, KeyFunc: ByUser}
+}
+
 func RateLimitRegister() RateLimitConfig {
 	return RateLimitConfig{Name: "register", Limit: 5, Window: time.Hour, KeyFunc: ByIP}
 }
