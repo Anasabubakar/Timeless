@@ -113,6 +113,32 @@ func (c *Config) CredentialKey() string {
 	return c.JWTSecret
 }
 
+// CORSOrigins returns every origin the API should accept
+// cross-origin requests from: FrontendURL plus AllowedOrigins,
+// deduplicated. Both entrypoints previously hardcoded
+// AllowOrigins: []string{cfg.FrontendURL} directly, silently ignoring
+// AllowedOrigins entirely — a config field that existed but did
+// nothing, the same pattern as the unregistered rate limiter and the
+// unwired RBAC middleware found earlier in this audit. This is what
+// makes a staging + production frontend (or any additional trusted
+// origin) actually work without editing code.
+func (c *Config) CORSOrigins() []string {
+	seen := make(map[string]bool, len(c.AllowedOrigins)+1)
+	var origins []string
+	add := func(origin string) {
+		if origin == "" || seen[origin] {
+			return
+		}
+		seen[origin] = true
+		origins = append(origins, origin)
+	}
+	add(c.FrontendURL)
+	for _, o := range c.AllowedOrigins {
+		add(o)
+	}
+	return origins
+}
+
 func (c *Config) IsDevelopment() bool {
 	return c.Environment == "development"
 }

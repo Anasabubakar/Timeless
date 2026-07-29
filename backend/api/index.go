@@ -83,7 +83,7 @@ func initApp() {
 	app.Use(recover.New())
 	app.Use(requestid.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{cfg.FrontendURL},
+		AllowOrigins:     cfg.CORSOrigins(),
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"},
 		AllowCredentials: true,
