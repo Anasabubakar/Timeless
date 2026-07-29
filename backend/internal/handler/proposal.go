@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"log"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
@@ -118,7 +120,8 @@ func (h *ProposalHandler) Generate(c fiber.Ctx) error {
 
 	proposal, err := h.svc.Generate(c.Context(), orgID, userID, &input)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		log.Printf("proposal: generation failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "proposal generation failed")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"data": proposal})

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -48,7 +49,8 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 		if err.Error() == "email already registered" {
 			return fiber.NewError(fiber.StatusConflict, err.Error())
 		}
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		log.Printf("auth: registration failed for %s: %v", input.Email, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "registration failed")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
@@ -201,7 +203,8 @@ func (h *AuthHandler) EnrollMFA(c fiber.Ctx) error {
 
 	enrollment, err := h.svc.EnrollMFA(c.Context(), userID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		log.Printf("auth: mfa enrollment failed for user %s: %v", userID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to start mfa enrollment")
 	}
 	return c.JSON(enrollment)
 }

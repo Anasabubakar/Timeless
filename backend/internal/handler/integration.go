@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -173,7 +174,8 @@ func (h *IntegrationHandler) RotateCredentials(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
 	result, err := h.svc.RotateCredentials(c.Context(), orgID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		log.Printf("integration: credential rotation failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "credential rotation failed")
 	}
 	return c.JSON(fiber.Map{"data": result})
 }

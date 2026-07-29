@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"log"
+
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/timeless/backend/internal/middleware"
@@ -23,7 +25,8 @@ func (h *DiscoveryHandler) RunDiscovery(c fiber.Ctx) error {
 
 	projects, err := h.discovery.Run(c.Context(), orgID, userID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		log.Printf("discovery: run failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "discovery run failed")
 	}
 	return c.JSON(fiber.Map{"data": projects})
 }
@@ -39,7 +42,8 @@ func (h *DiscoveryHandler) SelectProjects(c fiber.Ctx) error {
 
 	projects, err := h.discovery.Select(c.Context(), orgID, userID, input)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		log.Printf("discovery: select failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to save project selection")
 	}
 	return c.JSON(fiber.Map{"data": projects})
 }
@@ -59,7 +63,8 @@ func (h *DiscoveryHandler) RecommendGoals(c fiber.Ctx) error {
 
 	goals, err := h.goals.Recommend(c.Context(), orgID, userID, req.ProjectNames)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		log.Printf("discovery: goal recommendation failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to generate goal recommendations")
 	}
 	return c.JSON(fiber.Map{"data": goals})
 }
@@ -79,7 +84,8 @@ func (h *DiscoveryHandler) PlanAutomation(c fiber.Ctx) error {
 
 	steps, err := h.plans.Plan(c.Context(), orgID, userID, req.Goal)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		log.Printf("discovery: automation planning failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to plan automation")
 	}
 	return c.JSON(fiber.Map{"data": steps})
 }
@@ -99,7 +105,8 @@ func (h *DiscoveryHandler) ApproveAutomation(c fiber.Ctx) error {
 
 	automations, err := h.plans.Approve(c.Context(), orgID, userID, req.Steps)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		log.Printf("discovery: automation approval failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to approve automation")
 	}
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"data": automations})
 }
