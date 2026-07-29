@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/timeless/backend/internal/middleware"
+	"github.com/timeless/backend/internal/pkg/reqbind"
 )
 
 type BatchHandler struct {
@@ -45,14 +46,8 @@ func (h *BatchHandler) BatchDelete(entity string) fiber.Handler {
 		orgID := middleware.GetOrgID(c)
 
 		var input BatchDeleteInput
-		if err := c.Bind().JSON(&input); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
-		}
-		if len(input.IDs) == 0 {
-			return fiber.NewError(fiber.StatusBadRequest, "ids array is required")
-		}
-		if len(input.IDs) > 100 {
-			return fiber.NewError(fiber.StatusBadRequest, "maximum 100 items per batch")
+		if verr := reqbind.JSON(c, &input); verr != nil {
+			return verr
 		}
 
 		result := h.db.
@@ -74,14 +69,8 @@ func (h *BatchHandler) BatchUpdate(entity string) fiber.Handler {
 		orgID := middleware.GetOrgID(c)
 
 		var input BatchUpdateInput
-		if err := c.Bind().JSON(&input); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
-		}
-		if len(input.IDs) == 0 {
-			return fiber.NewError(fiber.StatusBadRequest, "ids array is required")
-		}
-		if len(input.IDs) > 100 {
-			return fiber.NewError(fiber.StatusBadRequest, "maximum 100 items per batch")
+		if verr := reqbind.JSON(c, &input); verr != nil {
+			return verr
 		}
 
 		allowed := allowedBatchFields[entity]
