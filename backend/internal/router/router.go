@@ -1,6 +1,9 @@
 package router
 
 import (
+	"log"
+	"strings"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -78,7 +81,9 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// Protected routes
 	auditMw := middleware.AuditLog(middleware.AuditConfig{DB: db})
-	protected := api.Group("", authMw.Handle, tenantMw.Handle, auditMw)
+	rbacMw := middleware.NewRBAC(db)
+	routeGuard := middleware.NewRouteGuard(rbacMw)
+	protected := api.Group("", authMw.Handle, tenantMw.Handle, auditMw, routeGuard.Handle)
 
 	// Auth (protected)
 	protected.Post("/auth/logout", authHandler.Logout)
@@ -426,4 +431,46 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	notifications.Delete("/:id", notifHandler.Delete)
 	notifications.Get("/preferences", notifHandler.GetPreferences)
 	notifications.Put("/preferences", notifHandler.UpdatePreference)
+
+	verifyRouteGuardCoverage(app)
+}
+
+// publicAPIRoutes are the only /api/v1 routes intentionally registered
+// outside the `protected` group (no auth/tenant/RouteGuard middleware) —
+// login/registration and things browsers/external services must reach
+// without a bearer token (OAuth redirects, the Notion webhook, which is
+// verified by HMAC signature instead of a session).
+var publicAPIRoutes = map[string]bool{
+	"POST /api/v1/auth/register":                     true,
+	"POST /api/v1/auth/login":                        true,
+	"POST /api/v1/auth/refresh":                      true,
+	"POST /api/v1/auth/verify-email":                 true,
+	"POST /api/v1/auth/resend-verification":          true,
+	"POST /api/v1/auth/forgot-password":              true,
+	"POST /api/v1/auth/reset-password":               true,
+	"POST /api/v1/auth/mfa/verify-login":             true,
+	"GET /api/v1/integrations/oauth/callback":        true,
+	"GET /api/v1/integrations/:provider/oauth/start": true,
+	"POST /api/v1/integrations/notion/webhook":       true,
+}
+
+// verifyRouteGuardCoverage walks every registered route at boot and
+// fails loudly if a /api/v1 route is neither in publicAPIRoutes nor in
+// RouteGuard's permission table — i.e. it would 403 every request, which
+// almost certainly means someone added a route and forgot to classify
+// it. Catching that at startup beats catching it when a customer's
+// first request to a brand-new endpoint mysteriously 403s.
+func verifyRouteGuardCoverage(app *fiber.App) {
+	for _, route := range app.GetRoutes() {
+		if !strings.HasPrefix(route.Path, "/api/v1/") {
+			continue
+		}
+		key := route.Method + " " + route.Path
+		if publicAPIRoutes[key] {
+			continue
+		}
+		if _, ok := middleware.RoutePermission(key); !ok {
+			log.Printf("router: WARNING — %s has no RouteGuard permission entry and is not in publicAPIRoutes; it will 403 every request until classified", key)
+		}
+	}
 }

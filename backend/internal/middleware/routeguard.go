@@ -186,6 +186,14 @@ var routePermissions = map[string]string{
 	"PUT /api/v1/notifications/preferences": authOnly,
 }
 
+// RoutePermission exposes routePermissions for the startup coverage
+// self-check in router.Setup — it needs to know what RouteGuard would
+// require for a given "METHOD /path" key without duplicating the table.
+func RoutePermission(methodAndPath string) (string, bool) {
+	perm, ok := routePermissions[methodAndPath]
+	return perm, ok
+}
+
 // RouteGuard enforces the routePermissions table as the last link in the
 // protected middleware chain.
 type RouteGuard struct {
