@@ -72,10 +72,7 @@ func main() {
 	app.Use(recover.New())
 	app.Use(requestid.New())
 	app.Use(middleware.SecurityHeaders(cfg))
-	app.Use(logger.New(logger.Config{
-		Format:     "${time} | ${status} | ${latency} | ${ip} | ${method} | ${path}\n",
-		TimeFormat: "2006-01-02 15:04:05",
-	}))
+	app.Use(logger.New(middleware.RequestLogger()))
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSOrigins(),
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
