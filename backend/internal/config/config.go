@@ -90,6 +90,13 @@ type Config struct {
 
 	AllowedOrigins []string `env:"ALLOWED_ORIGINS" envSeparator:"," envDefault:"http://localhost:3000"`
 
+	// AuditLogRetentionDays bounds how long activity/audit-log rows are
+	// kept before the retention job purges them. 0 disables purging
+	// (retain forever) — the safe default, since silently losing audit
+	// history is worse than an unbounded table until someone opts in to
+	// a retention window that fits their compliance requirements.
+	AuditLogRetentionDays int `env:"AUDIT_LOG_RETENTION_DAYS" envDefault:"0"`
+
 	LogLevel  string `env:"LOG_LEVEL" envDefault:"debug"`
 	LogFormat string `env:"LOG_FORMAT" envDefault:"text"`
 }
