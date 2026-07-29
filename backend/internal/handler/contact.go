@@ -2,12 +2,16 @@ package handler
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
+	"gorm.io/datatypes"
 
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/pkg/reqbind"
 	"github.com/timeless/backend/internal/service"
 )
 
@@ -17,6 +21,46 @@ type ContactHandler struct {
 
 func NewContactHandler(svc *service.ContactService) *ContactHandler {
 	return &ContactHandler{svc: svc}
+}
+
+// ContactInput is the client-writable subset of models.Contact —
+// binding directly into the GORM model (the previous behavior) let a
+// client set their own ID/OrganizationID/CreatedAt on create, the same
+// mass-assignment gap fixed for CompanyInput/SponsorInput.
+type ContactInput struct {
+	CompanyID       *uuid.UUID     `json:"company_id,omitempty"`
+	FirstName       string         `json:"first_name" validate:"required"`
+	LastName        string         `json:"last_name" validate:"required"`
+	Email           *string        `json:"email,omitempty" validate:"omitempty,email"`
+	Phone           *string        `json:"phone,omitempty"`
+	Title           *string        `json:"title,omitempty"`
+	Department      *string        `json:"department,omitempty"`
+	LinkedinURL     *string        `json:"linkedin_url,omitempty" validate:"omitempty,url"`
+	AvatarURL       *string        `json:"avatar_url,omitempty" validate:"omitempty,url"`
+	Notes           *string        `json:"notes,omitempty"`
+	Tags            pq.StringArray `json:"tags"`
+	CustomFields    datatypes.JSON `json:"custom_fields"`
+	LastContactedAt *time.Time     `json:"last_contacted_at,omitempty"`
+	Status          string         `json:"status"`
+}
+
+func (in *ContactInput) applyTo(contact *models.Contact) {
+	contact.CompanyID = in.CompanyID
+	contact.FirstName = in.FirstName
+	contact.LastName = in.LastName
+	contact.Email = in.Email
+	contact.Phone = in.Phone
+	contact.Title = in.Title
+	contact.Department = in.Department
+	contact.LinkedinURL = in.LinkedinURL
+	contact.AvatarURL = in.AvatarURL
+	contact.Notes = in.Notes
+	contact.Tags = in.Tags
+	contact.CustomFields = in.CustomFields
+	contact.LastContactedAt = in.LastContactedAt
+	if in.Status != "" {
+		contact.Status = in.Status
+	}
 }
 
 func (h *ContactHandler) List(c fiber.Ctx) error {
@@ -56,13 +100,15 @@ func (h *ContactHandler) Get(c fiber.Ctx) error {
 func (h *ContactHandler) Create(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
 
-	var contact models.Contact
-	if err := c.Bind().JSON(&contact); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	var input ContactInput
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
 
-	contact.OrganizationID = orgID
-	if err := h.svc.Create(c.Context(), &contact); err != nil {
+	contact := &models.Contact{OrganizationID: orgID}
+	input.applyTo(contact)
+
+	if err := h.svc.Create(c.Context(), contact); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create contact")
 	}
 
@@ -81,14 +127,12 @@ func (h *ContactHandler) Update(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, "contact not found")
 	}
 
-	if err := c.Bind().JSON(contact); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	var input ContactInput
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
+	input.applyTo(contact)
 
-	// Update() saves by primary key alone with no org-scoping (see
-	// repository.ContactRepository.Update) — without re-pinning these
-	// after the bind, a client could include "organization_id" in the
-	// body and move this contact into a different tenant's org entirely.
 	contact.OrganizationID = orgID
 	contact.ID = id
 	if err := h.svc.Update(c.Context(), contact); err != nil {
