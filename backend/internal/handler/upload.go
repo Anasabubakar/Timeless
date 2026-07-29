@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"path"
 	"strings"
 
@@ -26,11 +28,18 @@ var allowedMimeTypes = map[string]bool{
 const maxFileSize = 10 << 20 // 10MB
 
 type UploadHandler struct {
-	store storage.Storage
+	store   storage.Storage
+	scanner storage.Scanner
 }
 
-func NewUploadHandler(store storage.Storage) *UploadHandler {
-	return &UploadHandler{store: store}
+// NewUploadHandler defaults to storage.NoopScanner{} when scanner is
+// nil, so existing call sites (and tests) that don't care about
+// malware scanning don't need to change.
+func NewUploadHandler(store storage.Storage, scanner storage.Scanner) *UploadHandler {
+	if scanner == nil {
+		scanner = storage.NoopScanner{}
+	}
+	return &UploadHandler{store: store, scanner: scanner}
 }
 
 func (h *UploadHandler) Upload(c fiber.Ctx) error {
@@ -39,6 +48,15 @@ func (h *UploadHandler) Upload(c fiber.Ctx) error {
 	}
 
 	orgID := middleware.GetOrgID(c)
+
+	// Reject on the declared Content-Length before fasthttp buffers the
+	// whole multipart body into memory/temp files parsing it — a request
+	// that's obviously oversized shouldn't cost a full parse to reject.
+	// (fiber.Config.BodyLimit already caps this at the connection level;
+	// this just fails faster and with a clearer message.)
+	if n := c.Request().Header.ContentLength(); n > maxFileSize {
+		return fiber.NewError(fiber.StatusRequestEntityTooLarge, "file too large (max 10MB)")
+	}
 
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -69,10 +87,26 @@ func (h *UploadHandler) Upload(c fiber.Ctx) error {
 	}
 	defer src.Close()
 
+	content, err := io.ReadAll(src)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to read file")
+	}
+
+	clean, reason, err := h.scanner.Scan(c.Context(), file.Filename, content)
+	if err != nil {
+		// Scan failure (scanner unreachable/timed out), not a positive
+		// detection: treat as untrusted rather than letting the file
+		// through on a technicality.
+		return fiber.NewError(fiber.StatusServiceUnavailable, "file could not be scanned, try again")
+	}
+	if !clean {
+		return fiber.NewError(fiber.StatusBadRequest, "file rejected: "+reason)
+	}
+
 	sanitized := sanitizeFilename(file.Filename)
 	key := storage.GenerateKey(orgID.String(), folder, sanitized)
 
-	result, err := h.store.Upload(c.Context(), key, src, file.Size, contentType)
+	result, err := h.store.Upload(c.Context(), key, bytes.NewReader(content), file.Size, contentType)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "upload failed")
 	}

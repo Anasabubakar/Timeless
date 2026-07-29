@@ -381,7 +381,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 			store = s
 		}
 	}
-	uploadHandler := handler.NewUploadHandler(store)
+	uploadHandler := handler.NewUploadHandler(store, storage.NoopScanner{})
 	files := protected.Group("/files", rl.Limit(middleware.RateLimitUploads()))
 	files.Post("/upload", uploadHandler.Upload)
 	files.Delete("/", uploadHandler.Delete)
