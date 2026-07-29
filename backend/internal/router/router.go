@@ -80,7 +80,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	authHandler := handler.NewAuthHandler(authSvc)
 
 	// Public routes
-	api := app.Group("/api/v1")
+	api := app.Group("/api/v1", middleware.WithAPIVersion)
 	auth := api.Group("/auth", middleware.MaxBodySize(16*1024))
 	auth.Post("/register", authHandler.Register, rl.Limit(middleware.RateLimitRegister()))
 	auth.Post("/login", authHandler.Login, rl.Limit(middleware.RateLimitLogin()), rl.Limit(middleware.RateLimitLoginByAccount()))
