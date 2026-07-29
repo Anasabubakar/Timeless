@@ -331,7 +331,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	learningService := agent.NewLearningService(db)
 	orchestrator := agent.NewOrchestrator(registry, learningService)
 	aiHandler := handler.NewAIHandler(orchestrator)
-	ai := protected.Group("/ai", rl.Limit(middleware.RateLimitAIPerUser()), rl.Limit(middleware.RateLimitAIPerOrg()))
+	ai := protected.Group("/ai", middleware.MaxBodySize(32*1024), rl.Limit(middleware.RateLimitAIPerUser()), rl.Limit(middleware.RateLimitAIPerOrg()))
 	ai.Post("/query", timeout.New(aiHandler.Query, aiRequestTimeout), idempotent)
 	ai.Get("/agents", aiHandler.ListAgents)
 
