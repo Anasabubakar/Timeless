@@ -44,6 +44,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	authMw := middleware.NewAuth(cfg)
 	tenantMw := middleware.NewTenant(db)
 	rl := middleware.NewRedisRateLimiter(rdb, db)
+	idempotent := middleware.Idempotency(rdb, 10*time.Minute)
 
 	// Email Provider Registry (built early: AuthService needs it for
 	// verification/reset emails, well before the /emails endpoints below).
@@ -237,7 +238,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	proposals := protected.Group("/proposals", middleware.MaxBodySize(256*1024))
 	proposals.Get("/", proposalHandler.List)
 	proposals.Post("/", proposalHandler.Create)
-	proposals.Post("/generate", timeout.New(proposalHandler.Generate, aiRequestTimeout))
+	proposals.Post("/generate", timeout.New(proposalHandler.Generate, aiRequestTimeout), idempotent)
 	proposals.Get("/:id", proposalHandler.Get)
 	proposals.Patch("/:id", proposalHandler.Update)
 	proposals.Delete("/:id", proposalHandler.Delete)
@@ -258,7 +259,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	integrations.Patch("/:id", integrationHandler.Update)
 	integrations.Delete("/:id", integrationHandler.Delete)
 	integrations.Post("/:id/revoke", integrationHandler.Revoke)
-	integrations.Post("/:id/sync", integrationHandler.TriggerSync)
+	integrations.Post("/:id/sync", integrationHandler.TriggerSync, idempotent)
 	integrations.Post("/:provider/connect", integrationHandler.Connect)
 	integrations.Patch("/notion/pages/:pageID", integrationHandler.PushNotionPage)
 	integrations.Post("/rotate-credentials", integrationHandler.RotateCredentials)
@@ -331,7 +332,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	orchestrator := agent.NewOrchestrator(registry, learningService)
 	aiHandler := handler.NewAIHandler(orchestrator)
 	ai := protected.Group("/ai", rl.Limit(middleware.RateLimitAIPerUser()), rl.Limit(middleware.RateLimitAIPerOrg()))
-	ai.Post("/query", timeout.New(aiHandler.Query, aiRequestTimeout))
+	ai.Post("/query", timeout.New(aiHandler.Query, aiRequestTimeout), idempotent)
 	ai.Get("/agents", aiHandler.ListAgents)
 
 	// AI Learning & Feedback
