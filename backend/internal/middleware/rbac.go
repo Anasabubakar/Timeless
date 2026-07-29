@@ -115,6 +115,18 @@ func (m *RBACMiddleware) logDenial(c fiber.Ctx, userID, orgID uuid.UUID, require
 	go m.db.Create(&activity)
 }
 
+// HasPermission is the non-middleware entry point into the same
+// permission resolution Require/RequireAny use, for handlers that need
+// to make a permission-gated decision inline (e.g. which fields to
+// include in a response) rather than allow-or-403 an entire route.
+func (m *RBACMiddleware) HasPermission(userID, orgID uuid.UUID, permission string) (bool, error) {
+	perms, err := m.getUserPermissions(userID, orgID)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(perms, "*") || slices.Contains(perms, permission), nil
+}
+
 func (m *RBACMiddleware) getUserPermissions(userID, orgID uuid.UUID) ([]string, error) {
 	var roles []models.Role
 	err := m.db.

@@ -20,10 +20,11 @@ const ownerRoleName = "Owner"
 type TeamHandler struct {
 	db       *gorm.DB
 	roleRepo *repository.RoleRepository
+	rbac     *middleware.RBACMiddleware
 }
 
-func NewTeamHandler(db *gorm.DB, roleRepo *repository.RoleRepository) *TeamHandler {
-	return &TeamHandler{db: db, roleRepo: roleRepo}
+func NewTeamHandler(db *gorm.DB, roleRepo *repository.RoleRepository, rbac *middleware.RBACMiddleware) *TeamHandler {
+	return &TeamHandler{db: db, roleRepo: roleRepo, rbac: rbac}
 }
 
 // hasRole reports whether user currently holds the named role.
@@ -38,6 +39,17 @@ func (h *TeamHandler) hasRole(user *models.User, roleName string) bool {
 
 func (h *TeamHandler) ListMembers(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
+	userID := middleware.GetUserID(c)
+
+	// Which specific roles a teammate holds is more sensitive than the
+	// roster itself (it maps out who has elevated access — useful
+	// reconnaissance for social engineering) — only include it for
+	// callers who can actually manage team membership. Everyone with
+	// team:read still sees the roster, just not each person's roles.
+	canManage, err := h.rbac.HasPermission(userID, orgID, middleware.PermTeamManage)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to resolve permissions")
+	}
 
 	var users []models.User
 	if err := h.db.
@@ -56,15 +68,18 @@ func (h *TeamHandler) ListMembers(c fiber.Ctx) error {
 		AvatarURL *string   `json:"avatar_url,omitempty"`
 		JobTitle  *string   `json:"job_title,omitempty"`
 		Status    string    `json:"status"`
-		Roles     []string  `json:"roles"`
+		Roles     []string  `json:"roles,omitempty"`
 		CreatedAt string    `json:"created_at"`
 	}
 
 	members := make([]MemberResponse, 0, len(users))
 	for _, u := range users {
-		roles := make([]string, 0, len(u.Roles))
-		for _, r := range u.Roles {
-			roles = append(roles, r.Name)
+		var roles []string
+		if canManage {
+			roles = make([]string, 0, len(u.Roles))
+			for _, r := range u.Roles {
+				roles = append(roles, r.Name)
+			}
 		}
 		members = append(members, MemberResponse{
 			ID:        u.ID,
