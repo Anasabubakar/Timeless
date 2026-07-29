@@ -258,13 +258,13 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// OAuth (public: browser redirects can't carry auth headers)
 	oauthHandler := handler.NewOAuthHandler(cfg, rdb, integrationSvc)
-	api.Get("/integrations/oauth/callback", oauthHandler.Callback)
-	api.Get("/integrations/:provider/oauth/start", oauthHandler.Start)
+	api.Get("/integrations/oauth/callback", oauthHandler.Callback, rl.Limit(middleware.RateLimitOAuth()))
+	api.Get("/integrations/:provider/oauth/start", oauthHandler.Start, rl.Limit(middleware.RateLimitOAuth()))
 
 	// Notion webhooks (public: Notion calls this directly, verified via
 	// HMAC signature rather than our JWT auth)
 	notionWebhookHandler := handler.NewNotionWebhookHandler(rdb, integrationSvc)
-	api.Post("/integrations/notion/webhook", notionWebhookHandler.Receive)
+	api.Post("/integrations/notion/webhook", notionWebhookHandler.Receive, rl.Limit(middleware.RateLimitWebhookInbound()))
 
 	// Automations
 	automationRepo := repository.NewAutomationRepository(db)

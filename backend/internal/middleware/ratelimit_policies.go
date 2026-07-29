@@ -73,6 +73,13 @@ func RateLimitAPI() RateLimitConfig {
 	return RateLimitConfig{Name: "api", Limit: 600, Window: time.Minute, Burst: 60, BurstWindow: 5 * time.Second, KeyFunc: ByUser}
 }
 
+// RateLimitOAuth covers the OAuth start/callback redirects — public,
+// unauthenticated, and a plausible target for state-guessing or plain
+// flooding since they're reachable without a session.
+func RateLimitOAuth() RateLimitConfig {
+	return RateLimitConfig{Name: "oauth", Limit: 30, Window: 5 * time.Minute, Burst: 10, BurstWindow: 10 * time.Second, KeyFunc: ByIP}
+}
+
 // RateLimitWebhookInbound is for inbound webhook receivers (Notion
 // today; Zapier once inbound support exists) — keyed by IP since the
 // caller isn't an authenticated user.
