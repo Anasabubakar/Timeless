@@ -33,6 +33,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	// Middleware instances
 	authMw := middleware.NewAuth(cfg)
 	tenantMw := middleware.NewTenant(db)
+	rl := middleware.NewRedisRateLimiter(rdb, db)
 
 	// Email Provider Registry (built early: AuthService needs it for
 	// verification/reset emails, well before the /emails endpoints below).
@@ -70,14 +71,14 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	// Public routes
 	api := app.Group("/api/v1")
 	auth := api.Group("/auth")
-	auth.Post("/register", authHandler.Register)
-	auth.Post("/login", authHandler.Login)
-	auth.Post("/refresh", authHandler.RefreshToken)
-	auth.Post("/verify-email", authHandler.VerifyEmail)
-	auth.Post("/resend-verification", authHandler.ResendVerification)
-	auth.Post("/forgot-password", authHandler.ForgotPassword)
-	auth.Post("/reset-password", authHandler.ResetPassword)
-	auth.Post("/mfa/verify-login", authHandler.VerifyMFALogin)
+	auth.Post("/register", authHandler.Register, rl.Limit(middleware.RateLimitRegister()))
+	auth.Post("/login", authHandler.Login, rl.Limit(middleware.RateLimitLogin()))
+	auth.Post("/refresh", authHandler.RefreshToken, rl.Limit(middleware.RateLimitRefresh()))
+	auth.Post("/verify-email", authHandler.VerifyEmail, rl.Limit(middleware.RateLimitEmailVerification()))
+	auth.Post("/resend-verification", authHandler.ResendVerification, rl.Limit(middleware.RateLimitEmailVerification()))
+	auth.Post("/forgot-password", authHandler.ForgotPassword, rl.Limit(middleware.RateLimitPasswordReset()))
+	auth.Post("/reset-password", authHandler.ResetPassword, rl.Limit(middleware.RateLimitPasswordReset()))
+	auth.Post("/mfa/verify-login", authHandler.VerifyMFALogin, rl.Limit(middleware.RateLimitMFAVerify()))
 
 	// Protected routes
 	auditMw := middleware.AuditLog(middleware.AuditConfig{DB: db})
