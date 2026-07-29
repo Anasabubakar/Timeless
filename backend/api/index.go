@@ -87,7 +87,8 @@ func initApp() {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSOrigins(),
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "Idempotency-Key"},
+		ExposeHeaders:    []string{"X-API-Version", "Idempotency-Replayed"},
 		AllowCredentials: true,
 		MaxAge:           3600,
 	}))
