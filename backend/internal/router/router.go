@@ -95,7 +95,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	auditMw := middleware.AuditLog(middleware.AuditConfig{DB: db})
 	rbacMw := middleware.NewRBAC(db)
 	routeGuard := middleware.NewRouteGuard(rbacMw)
-	protected := api.Group("", authMw.Handle, rl.Limit(middleware.RateLimitAPI()), tenantMw.Handle, auditMw, routeGuard.Handle)
+	protected := api.Group("", authMw.Handle, middleware.ValidateOrigin(cfg.CORSOrigins()), rl.Limit(middleware.RateLimitAPI()), tenantMw.Handle, auditMw, routeGuard.Handle)
 
 	// Auth (protected)
 	protected.Post("/auth/logout", authHandler.Logout)
