@@ -371,7 +371,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 		}
 	}
 	uploadHandler := handler.NewUploadHandler(store)
-	files := protected.Group("/files")
+	files := protected.Group("/files", rl.Limit(middleware.RateLimitUploads()))
 	files.Post("/upload", uploadHandler.Upload)
 	files.Delete("/", uploadHandler.Delete)
 
@@ -381,7 +381,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// Import
 	importHandler := handler.NewImportHandler(db)
-	imports := protected.Group("/import")
+	imports := protected.Group("/import", rl.Limit(middleware.RateLimitImports()))
 	imports.Post("/companies", importHandler.ImportCompanies)
 	imports.Post("/contacts", importHandler.ImportContacts)
 	imports.Post("/sponsors", importHandler.ImportSponsors)
@@ -406,7 +406,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// Email endpoints
 	emailHandler := handler.NewEmailHandler(emailSender, workerClient)
-	emails := protected.Group("/emails")
+	emails := protected.Group("/emails", rl.Limit(middleware.RateLimitEmailsSend()))
 	emails.Post("/send", emailHandler.Send)
 	emails.Post("/send-direct", emailHandler.SendDirect)
 	emails.Post("/send-template", emailHandler.SendTemplate)
