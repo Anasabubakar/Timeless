@@ -37,6 +37,23 @@ func (h *TeamHandler) hasRole(user *models.User, roleName string) bool {
 	return false
 }
 
+// requesterIsOwner reports whether the authenticated caller currently
+// holds the Owner role. team:manage (granted to Admin and above) is
+// enough to invite or promote Admins/Managers/Members/Guests, but
+// granting Owner — the one tier with special removal/demotion
+// protection — must require already being an Owner. Without this, any
+// Admin could mint themselves (or an accomplice) a second Owner account
+// with no additional check, which defeats the point of a distinct tier.
+func (h *TeamHandler) requesterIsOwner(c fiber.Ctx, orgID uuid.UUID) (bool, error) {
+	userID := middleware.GetUserID(c)
+	var requester models.User
+	if err := h.db.Preload("Roles", "organization_id = ?", orgID).
+		Where("id = ? AND organization_id = ?", userID, orgID).First(&requester).Error; err != nil {
+		return false, err
+	}
+	return h.hasRole(&requester, ownerRoleName), nil
+}
+
 func (h *TeamHandler) ListMembers(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
 	userID := middleware.GetUserID(c)
@@ -112,6 +129,16 @@ func (h *TeamHandler) InviteMember(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
+	if input.Role == ownerRoleName {
+		isOwner, err := h.requesterIsOwner(c, orgID)
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to verify ownership")
+		}
+		if !isOwner {
+			return fiber.NewError(fiber.StatusForbidden, "only an existing Owner can invite a new Owner")
+		}
+	}
+
 	var existing models.User
 	if err := h.db.Where("email = ? AND organization_id = ?", input.Email, orgID).First(&existing).Error; err == nil {
 		return fiber.NewError(fiber.StatusConflict, "user already exists in this organization")
@@ -167,6 +194,16 @@ func (h *TeamHandler) UpdateMemberRole(c fiber.Ctx) error {
 		}
 		if remaining == 0 {
 			return fiber.NewError(fiber.StatusBadRequest, "cannot remove Owner from the organization's last owner")
+		}
+	}
+
+	if !h.hasRole(&user, ownerRoleName) && slices.Contains(input.Roles, ownerRoleName) {
+		isOwner, err := h.requesterIsOwner(c, orgID)
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to verify ownership")
+		}
+		if !isOwner {
+			return fiber.NewError(fiber.StatusForbidden, "only an existing Owner can grant the Owner role")
 		}
 	}
 
