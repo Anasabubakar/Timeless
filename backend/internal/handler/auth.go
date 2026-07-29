@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/timeless/backend/internal/middleware"
+	"github.com/timeless/backend/internal/pkg/reqbind"
 	"github.com/timeless/backend/internal/service"
 )
 
@@ -32,16 +33,8 @@ func sessionMeta(c fiber.Ctx, rememberMe bool) service.SessionMeta {
 
 func (h *AuthHandler) Register(c fiber.Ctx) error {
 	var input service.RegisterInput
-	if err := c.Bind().JSON(&input); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
-	}
-
-	if input.Email == "" || input.Password == "" || input.FirstName == "" || input.LastName == "" || input.OrgName == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "all fields are required")
-	}
-
-	if len(input.Password) < 8 {
-		return fiber.NewError(fiber.StatusBadRequest, "password must be at least 8 characters")
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
 
 	user, tokens, err := h.svc.Register(c.Context(), input, sessionMeta(c, false))
@@ -61,8 +54,8 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 
 func (h *AuthHandler) Login(c fiber.Ctx) error {
 	var input service.LoginInput
-	if err := c.Bind().JSON(&input); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
 
 	user, tokens, err := h.svc.Login(c.Context(), input, sessionMeta(c, input.RememberMe))
@@ -89,12 +82,14 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 	})
 }
 
+type refreshTokenBody struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
 func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
-	var body struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-	if err := c.Bind().JSON(&body); err != nil || body.RefreshToken == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "refresh_token is required")
+	var body refreshTokenBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
 	}
 
 	tokens, err := h.svc.RefreshToken(c.Context(), body.RefreshToken)
@@ -106,36 +101,38 @@ func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
 }
 
 func (h *AuthHandler) Logout(c fiber.Ctx) error {
-	var body struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-	if err := c.Bind().JSON(&body); err != nil || body.RefreshToken == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "refresh_token is required")
+	var body refreshTokenBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
 	}
 
 	_ = h.svc.Logout(c.Context(), body.RefreshToken)
 	return c.JSON(fiber.Map{"message": "logged out"})
 }
 
+type emailOnlyBody struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
 func (h *AuthHandler) ForgotPassword(c fiber.Ctx) error {
-	var body struct {
-		Email string `json:"email"`
-	}
-	if err := c.Bind().JSON(&body); err != nil || body.Email == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "email is required")
+	var body emailOnlyBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
 	}
 
 	_ = h.svc.ForgotPassword(c.Context(), body.Email, c.IP())
 	return c.JSON(fiber.Map{"message": "if that address has an account, a reset email has been sent"})
 }
 
+type resetPasswordBody struct {
+	Token       string `json:"token" validate:"required"`
+	NewPassword string `json:"new_password" validate:"required,min=8"`
+}
+
 func (h *AuthHandler) ResetPassword(c fiber.Ctx) error {
-	var body struct {
-		Token       string `json:"token"`
-		NewPassword string `json:"new_password"`
-	}
-	if err := c.Bind().JSON(&body); err != nil || body.Token == "" || body.NewPassword == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "token and new_password are required")
+	var body resetPasswordBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
 	}
 
 	if err := h.svc.ResetPassword(c.Context(), body.Token, body.NewPassword); err != nil {
@@ -145,12 +142,14 @@ func (h *AuthHandler) ResetPassword(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "password reset — all sessions have been signed out"})
 }
 
+type tokenOnlyBody struct {
+	Token string `json:"token" validate:"required"`
+}
+
 func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
-	var body struct {
-		Token string `json:"token"`
-	}
-	if err := c.Bind().JSON(&body); err != nil || body.Token == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "token is required")
+	var body tokenOnlyBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
 	}
 
 	if err := h.svc.VerifyEmail(c.Context(), body.Token); err != nil {
@@ -161,11 +160,9 @@ func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 }
 
 func (h *AuthHandler) ResendVerification(c fiber.Ctx) error {
-	var body struct {
-		Email string `json:"email"`
-	}
-	if err := c.Bind().JSON(&body); err != nil || body.Email == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "email is required")
+	var body emailOnlyBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
 	}
 
 	_ = h.svc.ResendVerification(c.Context(), body.Email)
@@ -174,14 +171,16 @@ func (h *AuthHandler) ResendVerification(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "if that address needs verification, an email has been sent"})
 }
 
+type verifyMFALoginBody struct {
+	Ticket     string `json:"mfa_ticket" validate:"required"`
+	Code       string `json:"code" validate:"required,len=6|min=10"`
+	RememberMe bool   `json:"remember_me"`
+}
+
 func (h *AuthHandler) VerifyMFALogin(c fiber.Ctx) error {
-	var body struct {
-		Ticket     string `json:"mfa_ticket"`
-		Code       string `json:"code"`
-		RememberMe bool   `json:"remember_me"`
-	}
-	if err := c.Bind().JSON(&body); err != nil || body.Ticket == "" || body.Code == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "mfa_ticket and code are required")
+	var body verifyMFALoginBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
 	}
 
 	user, tokens, err := h.svc.VerifyMFALogin(c.Context(), body.Ticket, body.Code, sessionMeta(c, body.RememberMe))
@@ -209,17 +208,19 @@ func (h *AuthHandler) EnrollMFA(c fiber.Ctx) error {
 	return c.JSON(enrollment)
 }
 
+type mfaCodeBody struct {
+	Code string `json:"code" validate:"required,len=6|min=10"`
+}
+
 func (h *AuthHandler) ConfirmMFA(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
 	}
 
-	var body struct {
-		Code string `json:"code"`
-	}
-	if err := c.Bind().JSON(&body); err != nil || body.Code == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "code is required")
+	var body mfaCodeBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
 	}
 
 	if err := h.svc.ConfirmMFA(c.Context(), userID, body.Code); err != nil {
@@ -228,17 +229,19 @@ func (h *AuthHandler) ConfirmMFA(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "mfa enabled"})
 }
 
+type passwordOnlyBody struct {
+	Password string `json:"password" validate:"required"`
+}
+
 func (h *AuthHandler) DisableMFA(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
 	}
 
-	var body struct {
-		Password string `json:"password"`
-	}
-	if err := c.Bind().JSON(&body); err != nil || body.Password == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "password is required")
+	var body passwordOnlyBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
 	}
 
 	if err := h.svc.DisableMFA(c.Context(), userID, body.Password); err != nil {
