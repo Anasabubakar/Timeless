@@ -51,6 +51,9 @@ func initApp() {
 	if err != nil {
 		panic("config: " + err.Error())
 	}
+	if err := cfg.Validate(); err != nil {
+		panic(err.Error())
+	}
 
 	db, err := database.NewPostgres(cfg)
 	if err != nil {
