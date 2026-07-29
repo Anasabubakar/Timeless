@@ -16,6 +16,7 @@ import (
 
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/database"
+	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/pkg/apierror"
 	"github.com/timeless/backend/internal/router"
 	"github.com/timeless/backend/internal/worker"
@@ -67,6 +68,7 @@ func main() {
 
 	app.Use(recover.New())
 	app.Use(requestid.New())
+	app.Use(middleware.SecurityHeaders(cfg))
 	app.Use(logger.New(logger.Config{
 		Format:     "${time} | ${status} | ${latency} | ${ip} | ${method} | ${path}\n",
 		TimeFormat: "2006-01-02 15:04:05",

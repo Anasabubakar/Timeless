@@ -13,6 +13,7 @@ import (
 
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/database"
+	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/pkg/apierror"
 	"github.com/timeless/backend/internal/router"
 	"github.com/timeless/backend/internal/worker"
@@ -82,6 +83,7 @@ func initApp() {
 
 	app.Use(recover.New())
 	app.Use(requestid.New())
+	app.Use(middleware.SecurityHeaders(cfg))
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSOrigins(),
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
