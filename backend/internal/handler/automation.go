@@ -3,9 +3,11 @@ package handler
 import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/pkg/reqbind"
 	"github.com/timeless/backend/internal/service"
 )
 
@@ -15,6 +17,39 @@ type AutomationHandler struct {
 
 func NewAutomationHandler(svc *service.AutomationService) *AutomationHandler {
 	return &AutomationHandler{svc: svc}
+}
+
+// AutomationInput is the client-writable subset of models.Automation.
+// RunCount/LastRunAt/CreatedBy are deliberately excluded — they're
+// bookkeeping the app itself maintains, not something a request body
+// should be able to set (the previous direct-bind-into-the-model
+// behavior would have silently accepted a client-forged run_count).
+type AutomationInput struct {
+	Name          string         `json:"name" validate:"required"`
+	Description   *string        `json:"description,omitempty"`
+	TriggerType   string         `json:"trigger_type" validate:"required"`
+	TriggerConfig datatypes.JSON `json:"trigger_config"`
+	Actions       datatypes.JSON `json:"actions"`
+	Conditions    datatypes.JSON `json:"conditions"`
+	IsActive      *bool          `json:"is_active,omitempty"`
+}
+
+func (in *AutomationInput) applyTo(automation *models.Automation) {
+	automation.Name = in.Name
+	automation.Description = in.Description
+	automation.TriggerType = in.TriggerType
+	if in.TriggerConfig != nil {
+		automation.TriggerConfig = in.TriggerConfig
+	}
+	if in.Actions != nil {
+		automation.Actions = in.Actions
+	}
+	if in.Conditions != nil {
+		automation.Conditions = in.Conditions
+	}
+	if in.IsActive != nil {
+		automation.IsActive = *in.IsActive
+	}
 }
 
 func (h *AutomationHandler) List(c fiber.Ctx) error {
@@ -44,15 +79,15 @@ func (h *AutomationHandler) Create(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
 	userID := middleware.GetUserID(c)
 
-	var automation models.Automation
-	if err := c.Bind().JSON(&automation); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	var input AutomationInput
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
 
-	automation.OrganizationID = orgID
-	automation.CreatedBy = &userID
+	automation := &models.Automation{OrganizationID: orgID, CreatedBy: &userID}
+	input.applyTo(automation)
 
-	if err := h.svc.Create(c.Context(), &automation); err != nil {
+	if err := h.svc.Create(c.Context(), automation); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create automation")
 	}
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"data": automation})
@@ -70,14 +105,12 @@ func (h *AutomationHandler) Update(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, "automation not found")
 	}
 
-	if err := c.Bind().JSON(automation); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	var input AutomationInput
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
+	input.applyTo(automation)
 
-	// Update() saves by primary key with no org check (see
-	// repository.AutomationRepository.Update) — re-pin after the bind so
-	// a client-supplied "organization_id" can't move this automation
-	// into a different tenant's org.
 	automation.OrganizationID = orgID
 	automation.ID = id
 	if err := h.svc.Update(c.Context(), automation); err != nil {
@@ -99,6 +132,10 @@ func (h *AutomationHandler) Delete(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+type toggleAutomationBody struct {
+	Active bool `json:"is_active"`
+}
+
 func (h *AutomationHandler) Toggle(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
 	id, err := uuid.Parse(c.Params("id"))
@@ -106,11 +143,9 @@ func (h *AutomationHandler) Toggle(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
 	}
 
-	var body struct {
-		Active bool `json:"is_active"`
-	}
-	if err := c.Bind().JSON(&body); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	var body toggleAutomationBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
 	}
 
 	if err := h.svc.ToggleActive(c.Context(), orgID, id, body.Active); err != nil {
