@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestCredentialKeyPrefersDedicatedSecret(t *testing.T) {
 	cfg := &Config{JWTSecret: "jwt-secret", CredentialsEncryptionKey: "dedicated-secret"}
@@ -25,5 +28,35 @@ func TestIsDevelopmentIsProduction(t *testing.T) {
 	prod := &Config{Environment: "production"}
 	if prod.IsDevelopment() || !prod.IsProduction() {
 		t.Errorf("expected production config to report IsDevelopment=false, IsProduction=true")
+	}
+}
+
+func TestCORSOriginsMergesFrontendAndAllowedOrigins(t *testing.T) {
+	cfg := &Config{
+		FrontendURL:    "https://app.timeless.example",
+		AllowedOrigins: []string{"https://staging.timeless.example", "https://app.timeless.example"},
+	}
+	got := cfg.CORSOrigins()
+	want := []string{"https://app.timeless.example", "https://staging.timeless.example"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("CORSOrigins() = %v, want %v (FrontendURL first, AllowedOrigins deduplicated against it)", got, want)
+	}
+}
+
+func TestCORSOriginsHandlesEmptyAllowedOrigins(t *testing.T) {
+	cfg := &Config{FrontendURL: "https://app.timeless.example"}
+	got := cfg.CORSOrigins()
+	want := []string{"https://app.timeless.example"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("CORSOrigins() = %v, want %v", got, want)
+	}
+}
+
+func TestCORSOriginsIgnoresBlankEntries(t *testing.T) {
+	cfg := &Config{AllowedOrigins: []string{"", "https://app.timeless.example", ""}}
+	got := cfg.CORSOrigins()
+	want := []string{"https://app.timeless.example"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("CORSOrigins() = %v, want %v", got, want)
 	}
 }
