@@ -5,9 +5,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/pkg/reqbind"
 	"github.com/timeless/backend/internal/service"
 )
 
@@ -17,6 +19,47 @@ type CampaignHandler struct {
 
 func NewCampaignHandler(svc *service.CampaignService) *CampaignHandler {
 	return &CampaignHandler{svc: svc}
+}
+
+// CampaignInput is the client-writable subset of models.Campaign.
+// CreatedBy is deliberately excluded — it's set from the authenticated
+// user, never accepted from the request body, unlike the previous
+// direct-bind-into-the-model behavior which would have silently
+// accepted (and let a client forge) any created_by a request supplied.
+type CampaignInput struct {
+	ProjectID      uuid.UUID      `json:"project_id" validate:"required"`
+	Name           string         `json:"name" validate:"required"`
+	Description    *string        `json:"description,omitempty"`
+	Status         string         `json:"status"`
+	GoalAmount     *float64       `json:"goal_amount,omitempty"`
+	RaisedAmount   float64        `json:"raised_amount"`
+	Currency       string         `json:"currency"`
+	StartDate      *string        `json:"start_date,omitempty"`
+	EndDate        *string        `json:"end_date,omitempty"`
+	PipelineStages datatypes.JSON `json:"pipeline_stages"`
+	Settings       datatypes.JSON `json:"settings"`
+}
+
+func (in *CampaignInput) applyTo(campaign *models.Campaign) {
+	campaign.ProjectID = in.ProjectID
+	campaign.Name = in.Name
+	campaign.Description = in.Description
+	if in.Status != "" {
+		campaign.Status = in.Status
+	}
+	campaign.GoalAmount = in.GoalAmount
+	campaign.RaisedAmount = in.RaisedAmount
+	if in.Currency != "" {
+		campaign.Currency = in.Currency
+	}
+	campaign.StartDate = in.StartDate
+	campaign.EndDate = in.EndDate
+	if in.PipelineStages != nil {
+		campaign.PipelineStages = in.PipelineStages
+	}
+	if in.Settings != nil {
+		campaign.Settings = in.Settings
+	}
 }
 
 func (h *CampaignHandler) List(c fiber.Ctx) error {
@@ -39,14 +82,17 @@ func (h *CampaignHandler) List(c fiber.Ctx) error {
 
 func (h *CampaignHandler) Create(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
+	userID := middleware.GetUserID(c)
 
-	var campaign models.Campaign
-	if err := c.Bind().JSON(&campaign); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	var input CampaignInput
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
 
-	campaign.OrganizationID = orgID
-	if err := h.svc.Create(c.Context(), &campaign); err != nil {
+	campaign := &models.Campaign{OrganizationID: orgID, CreatedBy: &userID}
+	input.applyTo(campaign)
+
+	if err := h.svc.Create(c.Context(), campaign); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create campaign")
 	}
 
@@ -80,9 +126,11 @@ func (h *CampaignHandler) Update(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, "campaign not found")
 	}
 
-	if err := c.Bind().JSON(campaign); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	var input CampaignInput
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
+	input.applyTo(campaign)
 
 	campaign.OrganizationID = orgID
 	campaign.ID = id
