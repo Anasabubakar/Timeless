@@ -64,7 +64,7 @@ func ValidateTOTP(secret, code string) bool {
 
 	now := time.Now()
 	for skew := -totpSkew; skew <= totpSkew; skew++ {
-		counter := uint64(now.Add(time.Duration(skew) * totpPeriod).Unix() / int64(totpPeriod.Seconds()))
+		counter := uint64(now.Add(time.Duration(skew)*totpPeriod).Unix() / int64(totpPeriod.Seconds()))
 		expected := hotp(key, counter)
 		if subtle.ConstantTimeCompare([]byte(expected), []byte(code)) == 1 {
 			return true
