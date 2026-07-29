@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"log"
+	"github.com/timeless/backend/internal/logging"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -126,7 +126,7 @@ func (h *ProposalHandler) Generate(c fiber.Ctx) error {
 
 	proposal, err := h.svc.Generate(c.Context(), orgID, userID, &input)
 	if err != nil {
-		log.Printf("proposal: generation failed for org %s: %v", orgID, err)
+		logging.Printf("proposal: generation failed for org %s: %v", orgID, err)
 		return fiber.NewError(fiber.StatusInternalServerError, "proposal generation failed")
 	}
 

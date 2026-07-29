@@ -2,9 +2,10 @@ package apierror
 
 import (
 	"errors"
-	"log"
 
 	"github.com/gofiber/fiber/v3"
+
+	"github.com/timeless/backend/internal/logging"
 )
 
 // WriteError is the single place that turns whatever error a handler
@@ -39,7 +40,9 @@ func WriteError(c fiber.Ctx, err error) error {
 	// but the client only ever sees a generic message. This is the fix
 	// for handlers that used to do `fiber.NewError(500, err.Error())`
 	// and forward raw DB/internal error text straight to the response.
-	log.Printf("apierror: unhandled error on %s %s: %v", c.Method(), c.Path(), err)
+	// Every unhandled error in the app flows through here, so this is
+	// the single highest-value place to apply the redacting logger.
+	logging.Printf("apierror: unhandled error on %s %s: %v", c.Method(), c.Path(), err)
 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 		"error":   true,
 		"code":    "internal_error",
