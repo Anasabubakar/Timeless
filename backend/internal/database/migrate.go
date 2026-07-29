@@ -67,6 +67,10 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 
+	if err := enforceActivityImmutability(db); err != nil {
+		log.Printf("warning: could not install activities immutability trigger: %v", err)
+	}
+
 	if err := migrateKnowledgeTables(db); err != nil {
 		log.Printf("warning: knowledge/memory migration: %v", err)
 	}
@@ -78,6 +82,33 @@ func AutoMigrate(db *gorm.DB) error {
 
 	log.Println("auto-migration complete")
 	return nil
+}
+
+// enforceActivityImmutability installs a Postgres trigger that rejects
+// any UPDATE on the activities table (audit log), full stop. Nothing in
+// the application ever legitimately needs to modify an existing audit
+// row — Activity embeds Base, which supports GORM's ordinary
+// Save()/Updates() and soft-delete, and without this a bug, a
+// misconfigured admin tool, or an attacker with DB access could rewrite
+// history. Rows can still be hard-deleted (for retention purging, done
+// by the scheduled cleanup job, not by application-level Update calls)
+// — this only blocks in-place modification, since a row that
+// disappeared entirely is a different, separately-auditable event than
+// one that silently changed content while still looking present.
+func enforceActivityImmutability(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE OR REPLACE FUNCTION reject_activity_update() RETURNS trigger AS $$
+		BEGIN
+			RAISE EXCEPTION 'activities are immutable: row % cannot be updated after creation', OLD.id;
+		END;
+		$$ LANGUAGE plpgsql;
+
+		DROP TRIGGER IF EXISTS activities_immutable ON activities;
+		CREATE TRIGGER activities_immutable
+			BEFORE UPDATE ON activities
+			FOR EACH ROW
+			EXECUTE FUNCTION reject_activity_update();
+	`).Error
 }
 
 // userRole is the GORM many2many join model for users <-> roles.
