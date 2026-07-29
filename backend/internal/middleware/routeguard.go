@@ -215,6 +215,7 @@ func (g *RouteGuard) Handle(c fiber.Ctx) error {
 	perm, ok := routePermissions[key]
 	if !ok {
 		log.Printf("routeguard: DENY %s — no authorization policy registered for this route", key)
+		g.rbac.logDenial(c, GetUserID(c), GetOrgID(c), "unclassified route: "+key)
 		return fiber.NewError(fiber.StatusForbidden, "this route has no authorization policy configured")
 	}
 

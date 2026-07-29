@@ -3,9 +3,11 @@ package middleware
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"github.com/timeless/backend/internal/models"
@@ -42,6 +44,7 @@ func (m *RBACMiddleware) Require(permissions ...string) fiber.Handler {
 
 		for _, required := range permissions {
 			if !slices.Contains(userPerms, required) {
+				m.logDenial(c, userID, orgID, required)
 				return fiber.NewError(fiber.StatusForbidden, "insufficient permissions: "+required)
 			}
 		}
@@ -77,8 +80,39 @@ func (m *RBACMiddleware) RequireAny(permissions ...string) fiber.Handler {
 			}
 		}
 
+		m.logDenial(c, userID, orgID, strings.Join(permissions, " or "))
 		return fiber.NewError(fiber.StatusForbidden, "insufficient permissions")
 	}
+}
+
+// logDenial records a permission-denied security event. Async (like
+// AuditLog) so a slow/failed write never adds latency to — or fails — the
+// request that's already being rejected; the denial itself was already
+// decided by the time this runs.
+func (m *RBACMiddleware) logDenial(c fiber.Ctx, userID, orgID uuid.UUID, requiredPermission string) {
+	if m.db == nil {
+		return
+	}
+	meta := map[string]string{
+		"method":              c.Method(),
+		"path":                c.Path(),
+		"required_permission": requiredPermission,
+	}
+	metaJSON, _ := json.Marshal(meta)
+	ip := c.IP()
+
+	activity := models.Activity{
+		OrganizationID: orgID,
+		UserID:         &userID,
+		EntityType:     "authorization",
+		Type:           "permission_denied",
+		Subject:        "denied: " + requiredPermission,
+		IPAddress:      &ip,
+		Metadata:       datatypes.JSON(metaJSON),
+	}
+	activity.ID = uuid.New()
+
+	go m.db.Create(&activity)
 }
 
 func (m *RBACMiddleware) getUserPermissions(userID, orgID uuid.UUID) ([]string, error) {
