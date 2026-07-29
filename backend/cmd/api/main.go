@@ -16,6 +16,7 @@ import (
 
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/database"
+	"github.com/timeless/backend/internal/pkg/apierror"
 	"github.com/timeless/backend/internal/router"
 	"github.com/timeless/backend/internal/worker"
 )
@@ -107,16 +108,5 @@ func main() {
 }
 
 func globalErrorHandler(c fiber.Ctx, err error) error {
-	code := fiber.StatusInternalServerError
-	message := "Internal Server Error"
-
-	if e, ok := err.(*fiber.Error); ok {
-		code = e.Code
-		message = e.Message
-	}
-
-	return c.Status(code).JSON(fiber.Map{
-		"error":   true,
-		"message": message,
-	})
+	return apierror.WriteError(c, err)
 }
