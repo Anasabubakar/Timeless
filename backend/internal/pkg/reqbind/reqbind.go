@@ -46,7 +46,14 @@ func newValidator() *validator.Validate {
 // validation. Returns nil on success; on failure, returns an
 // *apierror.APIError ready to write back to the client.
 func JSON(c fiber.Ctx, dst any) *apierror.APIError {
-	body := c.Body()
+	return JSONFromBytes(c.Body(), dst)
+}
+
+// JSONFromBytes is JSON's decode+validate core without the fiber.Ctx
+// dependency — used directly by JSON, and handy in tests that want to
+// exercise a DTO's validation/mass-assignment behavior without spinning
+// up a full fiber app and request.
+func JSONFromBytes(body []byte, dst any) *apierror.APIError {
 	if len(bytes.TrimSpace(body)) == 0 {
 		return apierror.BadRequest("request body is required")
 	}
