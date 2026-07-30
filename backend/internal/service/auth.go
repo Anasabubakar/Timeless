@@ -157,6 +157,56 @@ type RegisterInput struct {
 	LastName  string `json:"last_name" validate:"required"`
 	OrgName   string `json:"org_name" validate:"required"`
 	OrgSlug   string `json:"org_slug" validate:"required"`
+	// OrgPassword becomes the shared secret every future teammate needs
+	// to join this organization at signup (see JoinOrganization) or to
+	// re-authorize identity-changing settings changes later. Required
+	// here — Register only ever runs for a brand-new organization (see
+	// LookupOrganization for how the frontend decides Register vs Join).
+	OrgPassword string `json:"org_password" validate:"required,min=8"`
+}
+
+// OrgLookupResult tells the signup flow whether the organization the user
+// typed already exists, so the frontend can branch between "create it"
+// (Register, prompting for a new org password) and "join it" (Join,
+// prompting for the existing org password) before any account is
+// created. Deliberately exposes nothing besides existence + display
+// name/slug — no member count, no plan, nothing that helps enumerate or
+// profile an organization anonymously.
+type OrgLookupResult struct {
+	Exists bool   `json:"exists"`
+	Name   string `json:"name,omitempty"`
+	Slug   string `json:"slug,omitempty"`
+}
+
+// LookupOrganization resolves a user-typed organization name (or slug) to
+// whether it already exists. Accepts a raw name so the frontend can call
+// this straight from the "Organization name" field without deriving a
+// slug client-side first.
+func (s *AuthService) LookupOrganization(ctx context.Context, nameOrSlug string) (*OrgLookupResult, error) {
+	slug := normalize.Slug(nameOrSlug)
+	if slug == "" {
+		return &OrgLookupResult{Exists: false}, nil
+	}
+	org, err := s.orgRepo.FindBySlug(ctx, slug)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &OrgLookupResult{Exists: false}, nil
+		}
+		return nil, err
+	}
+	return &OrgLookupResult{Exists: true, Name: org.Name, Slug: org.Slug}, nil
+}
+
+// JoinInput is CASE 2 of signup (see LookupOrganization): the
+// organization already exists, and the caller is proving they know its
+// shared password rather than creating a new one.
+type JoinInput struct {
+	Email       string `json:"email" validate:"required,email"`
+	Password    string `json:"password" validate:"required,min=8"`
+	FirstName   string `json:"first_name" validate:"required"`
+	LastName    string `json:"last_name" validate:"required"`
+	OrgSlug     string `json:"org_slug" validate:"required"`
+	OrgPassword string `json:"org_password" validate:"required"`
 }
 
 type LoginInput struct {
@@ -184,6 +234,11 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 		return nil, nil, err
 	}
 
+	orgPasswordHash, err := bcrypt.GenerateFromPassword([]byte(input.OrgPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	var user *models.User
 	var org *models.Organization
 
@@ -197,7 +252,7 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 		roleRepoTx := repository.NewRoleRepository(tx)
 
 		var txErr error
-		org, txErr = createOrgWithUniqueSlug(ctx, tx, input.OrgName, input.OrgSlug)
+		org, txErr = createOrgWithUniqueSlug(ctx, tx, input.OrgName, input.OrgSlug, string(orgPasswordHash))
 		if txErr != nil {
 			return txErr
 		}
@@ -239,6 +294,130 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 	return user, tokens, nil
 }
 
+// ErrOrgPasswordLocked mirrors ErrAccountLocked for the organization's
+// shared join/settings password.
+var ErrOrgPasswordLocked = errors.New("too many incorrect organization password attempts, try again later")
+
+// JoinOrganization is CASE 2 of signup: the organization already exists
+// (per a prior LookupOrganization call), and the caller is proving they
+// know its shared password rather than minting a new organization. The
+// joiner becomes a Member — Owner/Admin are never handed out just for
+// knowing the org password; promoting someone requires an existing
+// Owner/Admin acting through the team-management endpoints.
+func (s *AuthService) JoinOrganization(ctx context.Context, input JoinInput, meta SessionMeta) (*models.User, *AuthTokens, error) {
+	normalizedEmail := normalize.Email(input.Email)
+
+	existing, _ := s.userRepo.FindByEmail(ctx, normalizedEmail)
+	if existing != nil {
+		return nil, nil, errors.New("email already registered")
+	}
+
+	org, err := s.orgRepo.FindBySlug(ctx, normalize.Slug(input.OrgSlug))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, errors.New("organization not found")
+		}
+		return nil, nil, err
+	}
+
+	if err := s.verifyOrgPassword(ctx, org, input.OrgPassword, meta.IP); err != nil {
+		return nil, nil, err
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var user *models.User
+	// User creation and role assignment must succeed together — same
+	// reasoning as Register: a user with zero roles is locked out of the
+	// org they just joined by RBAC itself.
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		userRepoTx := repository.NewUserRepository(tx)
+		roleRepoTx := repository.NewRoleRepository(tx)
+
+		hashStr := string(hash)
+		user = &models.User{
+			OrganizationID: org.ID,
+			Email:          normalizedEmail,
+			PasswordHash:   &hashStr,
+			FirstName:      input.FirstName,
+			LastName:       input.LastName,
+			Status:         "active",
+			EmailVerified:  false,
+		}
+		if err := userRepoTx.Create(ctx, user); err != nil {
+			return err
+		}
+
+		memberRole, err := roleRepoTx.FindByName(ctx, org.ID, "Member")
+		if err != nil {
+			return fmt.Errorf("failed to resolve default role: %w", err)
+		}
+		if err := roleRepoTx.AssignRole(ctx, user.ID, memberRole.ID); err != nil {
+			return fmt.Errorf("failed to assign role: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	s.issueEmailVerification(ctx, user)
+	s.auditAuth(org.ID, &user.ID, "user_joined", user.Email+" joined the organization", meta.IP, nil)
+
+	tokens, err := s.generateTokens(ctx, user, meta)
+	if err != nil {
+		return nil, nil, err
+	}
+	return user, tokens, nil
+}
+
+// verifyOrgPassword checks a presented organization password against the
+// stored hash, enforcing the same brute-force lockout pattern as user
+// login (see recordFailedLogin) but scoped to the organization as a
+// whole: the counter and lock apply to every joiner or settings-change
+// attempt against this org, not to one specific user, since the secret
+// being guessed is shared.
+func (s *AuthService) verifyOrgPassword(ctx context.Context, org *models.Organization, password, ip string) error {
+	if org.PasswordLockedUntil != nil && time.Now().Before(*org.PasswordLockedUntil) {
+		s.auditAuth(org.ID, nil, "org_password_blocked", "organization password attempt while locked", ip, nil)
+		return ErrOrgPasswordLocked
+	}
+
+	if org.PasswordHash == nil || bcrypt.CompareHashAndPassword([]byte(*org.PasswordHash), []byte(password)) != nil {
+		s.recordFailedOrgPassword(ctx, org, ip)
+		return errors.New("incorrect organization password")
+	}
+
+	if org.FailedPasswordAttempts > 0 || org.PasswordLockedUntil != nil {
+		org.FailedPasswordAttempts = 0
+		org.PasswordLockedUntil = nil
+		if err := s.orgRepo.Update(ctx, org); err != nil {
+			log.Printf("auth: failed to reset org password attempt counter for org %s: %v", org.ID, err)
+		}
+	}
+	return nil
+}
+
+func (s *AuthService) recordFailedOrgPassword(ctx context.Context, org *models.Organization, ip string) {
+	org.FailedPasswordAttempts++
+	locked := false
+	if org.FailedPasswordAttempts >= s.cfg.MaxFailedLogins {
+		until := time.Now().Add(s.cfg.LoginLockoutDuration)
+		org.PasswordLockedUntil = &until
+		locked = true
+	}
+	s.auditAuth(org.ID, nil, "org_password_failure", "failed organization password attempt", ip, map[string]string{
+		"failed_count":            strconv.Itoa(org.FailedPasswordAttempts),
+		"organization_now_locked": strconv.FormatBool(locked),
+	})
+	if err := s.orgRepo.Update(ctx, org); err != nil {
+		log.Printf("auth: failed to persist failed org-password count for org %s: %v", org.ID, err)
+	}
+}
+
 // createOrgWithUniqueSlug inserts a new organization, retrying with a
 // randomized suffix whenever the chosen slug collides. Two different
 // organizations legitimately named "Acme" (or any client racing another
@@ -263,7 +442,7 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 // under concurrent signups for the same organization name before this
 // was added: the first collision correctly retried, but every retry
 // after it failed with 25P02 and the whole registration 500'd.
-func createOrgWithUniqueSlug(ctx context.Context, tx *gorm.DB, name, requestedSlug string) (*models.Organization, error) {
+func createOrgWithUniqueSlug(ctx context.Context, tx *gorm.DB, name, requestedSlug, passwordHash string) (*models.Organization, error) {
 	orgRepo := repository.NewOrganizationRepository(tx)
 	base := normalize.Slug(requestedSlug)
 	if base == "" {
@@ -288,7 +467,7 @@ func createOrgWithUniqueSlug(ctx context.Context, tx *gorm.DB, name, requestedSl
 			return nil, fmt.Errorf("failed to set savepoint: %w", err)
 		}
 
-		org := &models.Organization{Name: name, Slug: slug, Plan: "free"}
+		org := &models.Organization{Name: name, Slug: slug, Plan: "free", PasswordHash: &passwordHash}
 		err := orgRepo.Create(ctx, org)
 		if err == nil {
 			return org, nil
