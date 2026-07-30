@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/url"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/integration"
 	"github.com/timeless/backend/internal/middleware"
+	"github.com/timeless/backend/internal/security"
 	"github.com/timeless/backend/internal/service"
 )
 
@@ -28,15 +31,17 @@ type OAuthHandler struct {
 	rdb       *redis.Client
 	svc       *service.IntegrationService
 	db        *gorm.DB
+	keyring   *security.JWTKeyring
 	providers map[string]*integration.OAuthProvider
 }
 
 func NewOAuthHandler(cfg *config.Config, rdb *redis.Client, svc *service.IntegrationService, db *gorm.DB) *OAuthHandler {
 	return &OAuthHandler{
-		cfg: cfg,
-		rdb: rdb,
-		svc: svc,
-		db:  db,
+		cfg:     cfg,
+		rdb:     rdb,
+		svc:     svc,
+		db:      db,
+		keyring: security.NewJWTKeyring(cfg.JWTSecret, cfg.JWTSecretPrevious...),
 		providers: map[string]*integration.OAuthProvider{
 			"notion": {
 				Provider:      "notion",
@@ -98,9 +103,31 @@ func (h *OAuthHandler) Start(c fiber.Ctx) error {
 	tokenStr := c.Query("token")
 	claims := jwt.MapClaims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-		return []byte(h.cfg.JWTSecret), nil
+		// Matches middleware.AuthMiddleware's keyfunc: reject anything
+		// that isn't HMAC-signed (defense against algorithm-confusion
+		// attacks — a keyfunc that ignores t.Method and just returns a
+		// key will happily "verify" a token forged with a different
+		// algorithm the key wasn't meant for), and resolve the signing
+		// key via the same kid-aware keyring the main auth middleware
+		// and AuthService use. Without this, a token signed under a
+		// just-rotated-out JWT_SECRET_PREVIOUS key (which the main API
+		// still accepts) would be rejected here — this endpoint would
+		// silently break for anyone who happened to be mid-session
+		// during a key rotation.
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		kid, _ := t.Header["kid"].(string)
+		key, ok := h.keyring.Key(kid)
+		if !ok {
+			return nil, errors.New("unknown signing key")
+		}
+		return key, nil
 	})
 	if err != nil || !token.Valid {
+		return h.frontendRedirect(c, url.Values{"error": {"invalid session, please sign in again"}})
+	}
+	if claims["type"] != "access" {
 		return h.frontendRedirect(c, url.Values{"error": {"invalid session, please sign in again"}})
 	}
 	orgID, _ := claims["org_id"].(string)
