@@ -50,7 +50,8 @@ type AuthService struct {
 	// db is used only for security-event audit logging
 	// (middleware.LogSecurityEvent) — every other read/write goes
 	// through the repositories above.
-	db *gorm.DB
+	db               *gorm.DB
+	orgPasswordGuard *orgPasswordGuard
 }
 
 func NewAuthService(
@@ -66,18 +67,19 @@ func NewAuthService(
 	db *gorm.DB,
 ) *AuthService {
 	return &AuthService{
-		userRepo:        userRepo,
-		orgRepo:         orgRepo,
-		sessionRepo:     sessionRepo,
-		emailVerifyRepo: emailVerifyRepo,
-		resetRepo:       resetRepo,
-		roleRepo:        roleRepo,
-		cfg:             cfg,
-		rdb:             rdb,
-		mailer:          mailer,
-		cipher:          security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...),
-		keyring:         security.NewJWTKeyring(cfg.JWTSecret, cfg.JWTSecretPrevious...),
-		db:              db,
+		userRepo:         userRepo,
+		orgRepo:          orgRepo,
+		sessionRepo:      sessionRepo,
+		emailVerifyRepo:  emailVerifyRepo,
+		resetRepo:        resetRepo,
+		roleRepo:         roleRepo,
+		cfg:              cfg,
+		rdb:              rdb,
+		mailer:           mailer,
+		cipher:           security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...),
+		keyring:          security.NewJWTKeyring(cfg.JWTSecret, cfg.JWTSecretPrevious...),
+		db:               db,
+		orgPasswordGuard: newOrgPasswordGuard(cfg, orgRepo, db),
 	}
 }
 
@@ -294,10 +296,6 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 	return user, tokens, nil
 }
 
-// ErrOrgPasswordLocked mirrors ErrAccountLocked for the organization's
-// shared join/settings password.
-var ErrOrgPasswordLocked = errors.New("too many incorrect organization password attempts, try again later")
-
 // JoinOrganization is CASE 2 of signup: the organization already exists
 // (per a prior LookupOrganization call), and the caller is proving they
 // know its shared password rather than minting a new organization. The
@@ -320,7 +318,7 @@ func (s *AuthService) JoinOrganization(ctx context.Context, input JoinInput, met
 		return nil, nil, err
 	}
 
-	if err := s.verifyOrgPassword(ctx, org, input.OrgPassword, meta.IP); err != nil {
+	if err := s.orgPasswordGuard.Verify(ctx, org, input.OrgPassword, meta.IP); err != nil {
 		return nil, nil, err
 	}
 
@@ -372,50 +370,6 @@ func (s *AuthService) JoinOrganization(ctx context.Context, input JoinInput, met
 		return nil, nil, err
 	}
 	return user, tokens, nil
-}
-
-// verifyOrgPassword checks a presented organization password against the
-// stored hash, enforcing the same brute-force lockout pattern as user
-// login (see recordFailedLogin) but scoped to the organization as a
-// whole: the counter and lock apply to every joiner or settings-change
-// attempt against this org, not to one specific user, since the secret
-// being guessed is shared.
-func (s *AuthService) verifyOrgPassword(ctx context.Context, org *models.Organization, password, ip string) error {
-	if org.PasswordLockedUntil != nil && time.Now().Before(*org.PasswordLockedUntil) {
-		s.auditAuth(org.ID, nil, "org_password_blocked", "organization password attempt while locked", ip, nil)
-		return ErrOrgPasswordLocked
-	}
-
-	if org.PasswordHash == nil || bcrypt.CompareHashAndPassword([]byte(*org.PasswordHash), []byte(password)) != nil {
-		s.recordFailedOrgPassword(ctx, org, ip)
-		return errors.New("incorrect organization password")
-	}
-
-	if org.FailedPasswordAttempts > 0 || org.PasswordLockedUntil != nil {
-		org.FailedPasswordAttempts = 0
-		org.PasswordLockedUntil = nil
-		if err := s.orgRepo.Update(ctx, org); err != nil {
-			log.Printf("auth: failed to reset org password attempt counter for org %s: %v", org.ID, err)
-		}
-	}
-	return nil
-}
-
-func (s *AuthService) recordFailedOrgPassword(ctx context.Context, org *models.Organization, ip string) {
-	org.FailedPasswordAttempts++
-	locked := false
-	if org.FailedPasswordAttempts >= s.cfg.MaxFailedLogins {
-		until := time.Now().Add(s.cfg.LoginLockoutDuration)
-		org.PasswordLockedUntil = &until
-		locked = true
-	}
-	s.auditAuth(org.ID, nil, "org_password_failure", "failed organization password attempt", ip, map[string]string{
-		"failed_count":            strconv.Itoa(org.FailedPasswordAttempts),
-		"organization_now_locked": strconv.FormatBool(locked),
-	})
-	if err := s.orgRepo.Update(ctx, org); err != nil {
-		log.Printf("auth: failed to persist failed org-password count for org %s: %v", org.ID, err)
-	}
 }
 
 // createOrgWithUniqueSlug inserts a new organization, retrying with a

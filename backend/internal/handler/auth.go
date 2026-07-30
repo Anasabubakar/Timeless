@@ -85,12 +85,12 @@ func (h *AuthHandler) Join(c fiber.Ctx) error {
 		switch {
 		case errors.Is(err, service.ErrOrgPasswordLocked):
 			return fiber.NewError(fiber.StatusTooManyRequests, err.Error())
+		case errors.Is(err, service.ErrIncorrectOrgPassword):
+			return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 		case err.Error() == "email already registered":
 			return fiber.NewError(fiber.StatusConflict, err.Error())
 		case err.Error() == "organization not found":
 			return fiber.NewError(fiber.StatusNotFound, err.Error())
-		case err.Error() == "incorrect organization password":
-			return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 		}
 		log.Printf("auth: join failed for %s: %v", input.Email, err)
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to join organization")
