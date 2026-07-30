@@ -92,6 +92,15 @@ func main() {
 		bus.Subscribe(evt, pushSvc.HandleEvent)
 	}
 
+	// Notion inbound: the webhook receiver (handler.NotionWebhookHandler)
+	// publishes NotionChanged for any page it can identify;
+	// syncengine.PullService reconciles that page's current state against
+	// whichever internal entity the sync ledger links it to, applying the
+	// change locally or — if the local side changed too — routing it to
+	// the conflict queue instead of guessing a winner.
+	pullSvc := syncengine.NewPullService(db, cipher, fieldMappingRepo, integrationRepo, syncedEntityRepo, syncHistoryRepo, adapters)
+	bus.Subscribe(eventbus.NotionChanged, pullSvc.HandleEvent)
+
 	mux := asynq.NewServeMux()
 	handlers := worker.NewHandlers(logger, db, cipher, syncRunRepo, registryCfg, bus)
 	worker.RegisterHandlers(mux, handlers)
