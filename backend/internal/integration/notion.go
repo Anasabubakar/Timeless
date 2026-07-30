@@ -119,6 +119,53 @@ func (c *NotionClient) UpdatePageProperties(ctx context.Context, credentials map
 	return err
 }
 
+// CreatePage creates a new page in the given data source (arbitrary,
+// user-selected — never a hardcoded ID) and returns its new page ID.
+// Used by the mapping-engine Notion adapter when a SyncedEntity has no
+// ExternalID yet.
+func (c *NotionClient) CreatePage(ctx context.Context, credentials map[string]string, dataSourceID string, properties map[string]interface{}) (string, error) {
+	token := strings.TrimSpace(credentials["token"])
+	if token == "" {
+		return "", fmt.Errorf("token is required")
+	}
+	body := map[string]interface{}{
+		"parent":     map[string]interface{}{"type": "data_source_id", "data_source_id": dataSourceID},
+		"properties": properties,
+	}
+	resp, err := c.doJSON(ctx, http.MethodPost, "https://api.notion.com/v1/pages", token, body)
+	if err != nil {
+		return "", err
+	}
+	id, _ := resp["id"].(string)
+	if id == "" {
+		return "", fmt.Errorf("notion did not return a page id for the created page")
+	}
+	return id, nil
+}
+
+// FetchPage reads a page's current properties + last_edited_time —
+// the inbound/conflict-detection path's "what does Notion say right now."
+func (c *NotionClient) FetchPage(ctx context.Context, credentials map[string]string, pageID string) (map[string]interface{}, error) {
+	token := strings.TrimSpace(credentials["token"])
+	if token == "" {
+		return nil, fmt.Errorf("token is required")
+	}
+	return c.doJSON(ctx, http.MethodGet, "https://api.notion.com/v1/pages/"+pageID, token, nil)
+}
+
+// ArchivePage soft-deletes a page in Notion (sets archived=true, Notion's
+// own trash — recoverable there, not a hard delete) — used when the
+// corresponding internal record is deleted and the mapping is configured
+// to propagate deletes.
+func (c *NotionClient) ArchivePage(ctx context.Context, credentials map[string]string, pageID string) error {
+	token := strings.TrimSpace(credentials["token"])
+	if token == "" {
+		return fmt.Errorf("token is required")
+	}
+	_, err := c.doJSON(ctx, http.MethodPatch, "https://api.notion.com/v1/pages/"+pageID, token, map[string]interface{}{"archived": true})
+	return err
+}
+
 // doJSON issues one Notion API call and maps well-known failure modes
 // (expired/revoked auth, rate limiting) to sentinel error types the caller
 // can act on, instead of a bare "HTTP 401" string.
