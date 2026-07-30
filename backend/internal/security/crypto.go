@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -118,6 +119,48 @@ func (c *CredentialCipher) Decrypt(encoded string) (string, error) {
 		return "", fmt.Errorf("unknown credential key id %q — was it rotated out without keeping the old secret in CREDENTIALS_ENCRYPTION_KEY_PREVIOUS?", keyID)
 	}
 	return open(key, payload)
+}
+
+// storedCredentials is the on-disk shape of an Integration.Credentials
+// column: one AES-GCM-encrypted, key-tagged blob wrapping a JSON
+// map[string]string of the provider's actual credential fields (token,
+// refresh_token, ...).
+type storedCredentials struct {
+	Enc string `json:"enc"`
+}
+
+// DecryptStoredCredentials unwraps and decrypts an Integration.Credentials
+// blob into the plain credential map — the same {"enc": "..."} envelope
+// every credential-storing caller in this codebase writes via
+// EncryptStoredCredentials.
+func (c *CredentialCipher) DecryptStoredCredentials(raw []byte) (map[string]string, error) {
+	var stored storedCredentials
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		return nil, fmt.Errorf("unmarshal stored credentials envelope: %w", err)
+	}
+	plain, err := c.Decrypt(stored.Enc)
+	if err != nil {
+		return nil, err
+	}
+	var credentials map[string]string
+	if err := json.Unmarshal([]byte(plain), &credentials); err != nil {
+		return nil, fmt.Errorf("unmarshal decrypted credentials: %w", err)
+	}
+	return credentials, nil
+}
+
+// EncryptStoredCredentials is the inverse of DecryptStoredCredentials —
+// encrypts a plain credential map and wraps it in the same envelope shape.
+func (c *CredentialCipher) EncryptStoredCredentials(credentials map[string]string) ([]byte, error) {
+	plain, err := json.Marshal(credentials)
+	if err != nil {
+		return nil, err
+	}
+	enc, err := c.Encrypt(string(plain))
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(storedCredentials{Enc: enc})
 }
 
 func seal(key [32]byte, plaintext string) (string, error) {

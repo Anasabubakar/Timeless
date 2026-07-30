@@ -90,3 +90,44 @@ func TestDecryptUnknownKeyIDFails(t *testing.T) {
 		t.Errorf("expected decrypt to fail for a key id neither current nor previous")
 	}
 }
+
+func TestStoredCredentialsRoundTrip(t *testing.T) {
+	c := NewCredentialCipher("secret-v1")
+	want := map[string]string{"token": "abc123", "refresh_token": "xyz789"}
+
+	stored, err := c.EncryptStoredCredentials(want)
+	if err != nil {
+		t.Fatalf("EncryptStoredCredentials: %v", err)
+	}
+	got, err := c.DecryptStoredCredentials(stored)
+	if err != nil {
+		t.Fatalf("DecryptStoredCredentials: %v", err)
+	}
+	if got["token"] != want["token"] || got["refresh_token"] != want["refresh_token"] {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestDecryptStoredCredentialsRejectsMalformedEnvelope(t *testing.T) {
+	c := NewCredentialCipher("secret-v1")
+	if _, err := c.DecryptStoredCredentials([]byte("not json")); err == nil {
+		t.Error("expected an error for a malformed stored-credentials envelope")
+	}
+}
+
+func TestStoredCredentialsSurvivesKeyRotation(t *testing.T) {
+	old := NewCredentialCipher("secret-v1")
+	stored, err := old.EncryptStoredCredentials(map[string]string{"token": "abc123"})
+	if err != nil {
+		t.Fatalf("EncryptStoredCredentials: %v", err)
+	}
+
+	rotated := NewCredentialCipher("secret-v2", "secret-v1")
+	got, err := rotated.DecryptStoredCredentials(stored)
+	if err != nil {
+		t.Fatalf("DecryptStoredCredentials after rotation: %v", err)
+	}
+	if got["token"] != "abc123" {
+		t.Errorf("got %v, want token=abc123", got)
+	}
+}
