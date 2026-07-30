@@ -76,13 +76,21 @@ type Adapter interface {
 
 	// Push creates or updates one record in the external system's
 	// container (a Notion database, an Airtable table, ...) and returns
-	// its external ID (existingExternalID empty means create).
-	Push(ctx context.Context, credentials map[string]string, containerID, existingExternalID string, properties map[string]interface{}, expectedRemoteVersion string) error
+	// its external ID (existingExternalID empty means create, so the
+	// caller — which has no other way to learn a freshly-created
+	// record's ID — must persist the returned value into the sync
+	// ledger).
+	Push(ctx context.Context, credentials map[string]string, containerID, existingExternalID string, properties map[string]interface{}, expectedRemoteVersion string) (string, error)
 
 	// Fetch reads one record back from the external system by ID — used
 	// by the inbound/conflict-detection path to get the current remote
 	// state before deciding how to reconcile a change.
 	Fetch(ctx context.Context, credentials map[string]string, containerID, externalID string) (*ExternalRecord, error)
+
+	// Archive removes (soft-deletes where the external system supports
+	// it) one record — used when the corresponding internal record is
+	// deleted and the mapping should propagate that.
+	Archive(ctx context.Context, credentials map[string]string, externalID string) error
 }
 
 // ParseFields decodes a FieldMapping's JSON Fields column into the typed

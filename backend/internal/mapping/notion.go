@@ -68,12 +68,18 @@ func (a *NotionAdapter) FromExternal(raw map[string]interface{}, fm *models.Fiel
 	return out, nil
 }
 
-func (a *NotionAdapter) Push(ctx context.Context, credentials map[string]string, containerID, existingExternalID string, properties map[string]interface{}, expectedRemoteVersion string) error {
+func (a *NotionAdapter) Push(ctx context.Context, credentials map[string]string, containerID, existingExternalID string, properties map[string]interface{}, expectedRemoteVersion string) (string, error) {
 	if existingExternalID == "" {
-		_, err := a.client.CreatePage(ctx, credentials, containerID, properties)
-		return err
+		return a.client.CreatePage(ctx, credentials, containerID, properties)
 	}
-	return a.client.UpdatePageProperties(ctx, credentials, existingExternalID, properties, expectedRemoteVersion)
+	if err := a.client.UpdatePageProperties(ctx, credentials, existingExternalID, properties, expectedRemoteVersion); err != nil {
+		return "", err
+	}
+	return existingExternalID, nil
+}
+
+func (a *NotionAdapter) Archive(ctx context.Context, credentials map[string]string, externalID string) error {
+	return a.client.ArchivePage(ctx, credentials, externalID)
 }
 
 func (a *NotionAdapter) Fetch(ctx context.Context, credentials map[string]string, containerID, externalID string) (*ExternalRecord, error) {
