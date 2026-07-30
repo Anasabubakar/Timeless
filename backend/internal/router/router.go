@@ -450,9 +450,19 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	// Realtime (WebSocket + SSE)
 	hub := realtime.NewHub()
 	go hub.Run()
-	// A dedicated Group (not handlers passed directly to Get) so
-	// c.Locals set by authMw.HandleWS is reliably visible to tenantMw —
-	// matching the exact pattern already proven for `protected` above.
+	// Handlers are attached directly to this one route (not via a Group
+	// with an empty prefix) so they only ever run for "/ws" itself. An
+	// empty-prefix Group registers its middleware as a fiber Use at the
+	// parent's own prefix — for app.Group("", ...) that's the app root,
+	// matching every route registered afterward — which is exactly the
+	// bug that broke Notion OAuth (see the comment on `protected` above)
+	// and, here, silently made every "/api/v1/notifications/*" and
+	// "/api/v1/events" route (registered after this one) require a `token`
+	// query param instead of the normal Authorization header, since they
+	// inherited authMw.HandleWS instead of the real auth middleware.
+	// fiber assembles a route's Handlers as [middleware..., handler], so
+	// authMw.HandleWS still runs first, before the WebSocket upgrade.
+	//
 	// WebSocket upgrades aren't subject to CORS/SOP the way a normal
 	// fetch() is — a page on any origin can attempt to open one. This
 	// app's token-in-query-param auth means an attacker's page can't
@@ -460,8 +470,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	// would be at risk of (that's the actual CSWSH threat model), but
 	// checking Origin on the upgrade is a cheap additional layer
 	// consistent with the rest of the API.
-	ws := app.Group("", authMw.HandleWS, middleware.ValidateOriginAlways(cfg.CORSOrigins()), tenantMw.Handle)
-	ws.Get("/ws", hub.WebSocketHandler())
+	app.Get("/ws", hub.WebSocketHandler(), authMw.HandleWS, middleware.ValidateOriginAlways(cfg.CORSOrigins()), tenantMw.Handle)
 	protected.Get("/events", hub.SSEHandler())
 
 	// Notifications
