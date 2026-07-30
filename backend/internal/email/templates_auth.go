@@ -37,6 +37,23 @@ func PasswordResetEmail(to, fromAddr, fromName, resetURL string) *Message {
 	}
 }
 
+// InvitationEmail builds the "you've been invited" message sent when
+// someone invites a new email address to join their organization.
+func InvitationEmail(to, orgName, acceptURL, fromAddr, fromName string) *Message {
+	text := fmt.Sprintf("You've been invited to join %s on Timeless. Accept your invitation here:\n\n%s\n\nThis link expires in 7 days and can only be used once. If you weren't expecting this, you can ignore this email.", orgName, acceptURL)
+	html := fmt.Sprintf(`<p>You've been invited to join <strong>%s</strong> on Timeless.</p><p><a href="%s">Accept invitation</a></p><p>This link expires in 7 days and can only be used once. If you weren't expecting this, you can ignore this email.</p>`, orgName, acceptURL)
+
+	return &Message{
+		From:     fromAddr,
+		FromName: fromName,
+		To:       []string{to},
+		Subject:  fmt.Sprintf("You've been invited to join %s on Timeless", orgName),
+		TextBody: text,
+		HTMLBody: html,
+		Tags:     map[string]string{"category": "team.invitation"},
+	}
+}
+
 // PasswordChangedEmail notifies a user their password changed, so they can
 // react quickly if it wasn't them.
 func PasswordChangedEmail(to, fromAddr, fromName string) *Message {

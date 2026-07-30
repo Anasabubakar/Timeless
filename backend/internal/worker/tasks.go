@@ -19,6 +19,7 @@ import (
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 
+	"github.com/timeless/backend/internal/eventbus"
 	"github.com/timeless/backend/internal/integration"
 	"github.com/timeless/backend/internal/models"
 	"github.com/timeless/backend/internal/repository"
@@ -59,13 +60,15 @@ type Handlers struct {
 	logger          *slog.Logger
 	db              *gorm.DB
 	integrationSync *integrationSyncRunner
+	bus             *eventbus.Bus
 }
 
-func NewHandlers(logger *slog.Logger, db *gorm.DB, cipher *security.CredentialCipher, syncRunRepo *repository.SyncRunRepository, registryCfg integration.RegistryConfig) *Handlers {
+func NewHandlers(logger *slog.Logger, db *gorm.DB, cipher *security.CredentialCipher, syncRunRepo *repository.SyncRunRepository, registryCfg integration.RegistryConfig, bus *eventbus.Bus) *Handlers {
 	return &Handlers{
 		logger:          logger,
 		db:              db,
 		integrationSync: newIntegrationSyncRunner(db, cipher, syncRunRepo, registryCfg),
+		bus:             bus,
 	}
 }
 
@@ -828,4 +831,5 @@ func RegisterHandlers(mux *asynq.ServeMux, h *Handlers) {
 	mux.HandleFunc(TaskAnalyticsCompute, h.HandleAnalyticsCompute)
 	mux.HandleFunc(TaskMemoryIndex, h.HandleMemoryIndex)
 	mux.HandleFunc(TaskIntegrationSync, h.HandleIntegrationSync)
+	mux.HandleFunc(TaskEventDispatch, h.HandleEventDispatch)
 }

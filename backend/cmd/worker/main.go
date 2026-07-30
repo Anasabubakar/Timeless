@@ -11,6 +11,7 @@ import (
 
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/database"
+	"github.com/timeless/backend/internal/eventbus"
 	"github.com/timeless/backend/internal/integration"
 	"github.com/timeless/backend/internal/repository"
 	"github.com/timeless/backend/internal/security"
@@ -57,8 +58,15 @@ func main() {
 	syncRunRepo := repository.NewSyncRunRepository(db)
 	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
 
+	// Subscribers register here as features that need to react to
+	// cross-entity events (search indexing, notifications, etc.) land —
+	// an unconfigured Bus (no SetPublisher, no Subscribe calls) is a
+	// documented no-op per eventbus.Bus, so this is safe to wire now
+	// ahead of any subscriber existing yet.
+	bus := eventbus.NewBus()
+
 	mux := asynq.NewServeMux()
-	handlers := worker.NewHandlers(logger, db, cipher, syncRunRepo, registryCfg)
+	handlers := worker.NewHandlers(logger, db, cipher, syncRunRepo, registryCfg, bus)
 	worker.RegisterHandlers(mux, handlers)
 
 	stopScheduler := worker.StartPeriodicResync(db, syncRunRepo, cfg, logger)
