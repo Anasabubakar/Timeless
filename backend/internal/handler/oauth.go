@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/url"
 	"time"
 
@@ -9,9 +10,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/integration"
+	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/service"
 )
 
@@ -24,14 +27,16 @@ type OAuthHandler struct {
 	cfg       *config.Config
 	rdb       *redis.Client
 	svc       *service.IntegrationService
+	db        *gorm.DB
 	providers map[string]*integration.OAuthProvider
 }
 
-func NewOAuthHandler(cfg *config.Config, rdb *redis.Client, svc *service.IntegrationService) *OAuthHandler {
+func NewOAuthHandler(cfg *config.Config, rdb *redis.Client, svc *service.IntegrationService, db *gorm.DB) *OAuthHandler {
 	return &OAuthHandler{
 		cfg: cfg,
 		rdb: rdb,
 		svc: svc,
+		db:  db,
 		providers: map[string]*integration.OAuthProvider{
 			"notion": {
 				Provider:      "notion",
@@ -133,7 +138,12 @@ func (h *OAuthHandler) Callback(c fiber.Ctx) error {
 
 	credentials, err := provider.Exchange(c.Context(), c.Query("code"), h.redirectURI())
 	if err != nil {
-		return h.frontendRedirect(c, url.Values{"error": {err.Error()}, "provider": {state.Provider}})
+		// The provider's token-exchange error can carry internal
+		// details (request/response fragments) that don't belong in a
+		// URL a browser will keep in history and send as a Referer —
+		// log it server-side, send the user a generic message.
+		log.Printf("oauth: token exchange failed for provider %s: %v", state.Provider, err)
+		return h.frontendRedirect(c, url.Values{"error": {"could not connect to " + state.Provider}, "provider": {state.Provider}})
 	}
 
 	orgID, err := uuid.Parse(state.OrgID)
@@ -146,8 +156,12 @@ func (h *OAuthHandler) Callback(c fiber.Ctx) error {
 	}
 
 	if _, err := h.svc.Connect(c.Context(), orgID, userID, state.Provider, service.ConnectInput{Credentials: credentials}); err != nil {
-		return h.frontendRedirect(c, url.Values{"error": {err.Error()}, "provider": {state.Provider}})
+		log.Printf("oauth: failed to persist connection for org %s provider %s: %v", orgID, state.Provider, err)
+		return h.frontendRedirect(c, url.Values{"error": {"could not connect to " + state.Provider}, "provider": {state.Provider}})
 	}
+
+	middleware.LogSecurityEvent(h.db, orgID, &userID, "integration", "integration_connected",
+		state.Provider+" connected via OAuth", c.IP(), map[string]string{"provider": state.Provider})
 
 	return h.frontendRedirect(c, url.Values{"connected": {state.Provider}})
 }

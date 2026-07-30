@@ -94,7 +94,43 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	auth.Post("/reset-password", authHandler.ResetPassword, rl.Limit(middleware.RateLimitPasswordReset()))
 	auth.Post("/mfa/verify-login", authHandler.VerifyMFALogin, rl.Limit(middleware.RateLimitMFAVerify()))
 
+	// Integrations service (constructed here, ahead of the `protected`
+	// group below, because the OAuth and webhook routes right after it
+	// must themselves be registered before `protected` exists — see the
+	// comment on that group for why).
+	integrationRepo := repository.NewIntegrationRepository(db)
+	syncRunRepo := repository.NewSyncRunRepository(db)
+	credentialCipher := security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...)
+	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
+	integrationSvc := service.NewIntegrationService(integrationRepo, syncRunRepo, credentialCipher, workerClient, registryCfg)
+
+	// OAuth (public: browser redirects can't carry auth headers). This
+	// authenticates the start leg via a JWT query param instead, and the
+	// callback leg via the state value minted at start time.
+	oauthHandler := handler.NewOAuthHandler(cfg, rdb, integrationSvc, db)
+	api.Get("/integrations/oauth/callback", oauthHandler.Callback, rl.Limit(middleware.RateLimitOAuth()))
+	api.Get("/integrations/:provider/oauth/start", oauthHandler.Start, rl.Limit(middleware.RateLimitOAuth()))
+
+	// Notion webhooks (public: Notion calls this directly, verified via
+	// HMAC signature rather than our JWT auth)
+	notionWebhookHandler := handler.NewNotionWebhookHandler(rdb, integrationSvc)
+	api.Post("/integrations/notion/webhook", notionWebhookHandler.Receive, rl.Limit(middleware.RateLimitWebhookInbound()))
+
 	// Protected routes
+	//
+	// IMPORTANT: this Group call uses an empty prefix ("") purely to attach
+	// middleware to every route registered on `protected` from here on —
+	// but Fiber implements that as app.Use("/api/v1", ...handlers), which
+	// matches by path prefix against routes added AFTER this point in
+	// registration order, regardless of which Group variable a later route
+	// is added through. Any route meant to stay public (no auth/tenant/
+	// RouteGuard middleware — see publicAPIRoutes below) MUST be registered
+	// on `api` above this line, or it will silently start requiring a
+	// bearer token. This bit Notion OAuth (both legs) and the Notion
+	// webhook receiver in production: they were registered on `api` after
+	// this group existed, so authMw rejected every request with "missing
+	// authorization header" before the handler — which does its own JWT
+	// parsing from a query param — ever ran.
 	auditMw := middleware.AuditLog(middleware.AuditConfig{DB: db})
 	rbacMw := middleware.NewRBAC(db)
 	routeGuard := middleware.NewRouteGuard(rbacMw)
@@ -246,12 +282,8 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	proposals.Patch("/:id", proposalHandler.Update)
 	proposals.Delete("/:id", proposalHandler.Delete)
 
-	// Integrations
-	integrationRepo := repository.NewIntegrationRepository(db)
-	syncRunRepo := repository.NewSyncRunRepository(db)
-	credentialCipher := security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...)
-	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
-	integrationSvc := service.NewIntegrationService(integrationRepo, syncRunRepo, credentialCipher, workerClient, registryCfg)
+	// Integrations (service constructed earlier, alongside the public
+	// OAuth/webhook routes above)
 	integrationHandler := handler.NewIntegrationHandler(integrationSvc)
 	integrations := protected.Group("/integrations")
 	integrations.Get("/", integrationHandler.List)
@@ -269,16 +301,6 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	dedupeHandler := handler.NewDedupeHandler(db)
 	protected.Post("/companies/dedupe", dedupeHandler.MergeCompanies)
-
-	// OAuth (public: browser redirects can't carry auth headers)
-	oauthHandler := handler.NewOAuthHandler(cfg, rdb, integrationSvc)
-	api.Get("/integrations/oauth/callback", oauthHandler.Callback, rl.Limit(middleware.RateLimitOAuth()))
-	api.Get("/integrations/:provider/oauth/start", oauthHandler.Start, rl.Limit(middleware.RateLimitOAuth()))
-
-	// Notion webhooks (public: Notion calls this directly, verified via
-	// HMAC signature rather than our JWT auth)
-	notionWebhookHandler := handler.NewNotionWebhookHandler(rdb, integrationSvc)
-	api.Post("/integrations/notion/webhook", notionWebhookHandler.Receive, rl.Limit(middleware.RateLimitWebhookInbound()))
 
 	// Automations
 	automationRepo := repository.NewAutomationRepository(db)
