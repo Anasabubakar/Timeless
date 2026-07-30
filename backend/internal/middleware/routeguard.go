@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"log"
+	"regexp"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -194,6 +196,68 @@ func RoutePermission(methodAndPath string) (string, bool) {
 	return perm, ok
 }
 
+// compiledRoute is a routePermissions entry with its path pattern
+// pre-compiled to a regexp, so matching a live request path doesn't
+// require fiber's own Ctx.Route() — see the comment on Handle for why
+// that's unusable here.
+type compiledRoute struct {
+	method string
+	path   string
+	perm   string
+	re     *regexp.Regexp
+}
+
+// compiledRoutes is built once at package init from routePermissions —
+// the single source of truth stays that map; this is purely a derived
+// index for fast, correct lookup at request time.
+var compiledRoutes = compileRoutePermissions(routePermissions)
+
+func compileRoutePermissions(perms map[string]string) []compiledRoute {
+	out := make([]compiledRoute, 0, len(perms))
+	for key, perm := range perms {
+		method, path, ok := strings.Cut(key, " ")
+		if !ok {
+			panic("routeguard: malformed routePermissions key (want \"METHOD /path\"): " + key)
+		}
+		out = append(out, compiledRoute{method: method, path: path, perm: perm, re: compileRoutePattern(path)})
+	}
+	return out
+}
+
+// compileRoutePattern turns a fiber route pattern ("/api/v1/companies/:id")
+// into an anchored regexp that matches the same interpolated runtime paths
+// fiber itself would ("/api/v1/companies/abc-123") — ":name" segments
+// become a single-segment wildcard, everything else is matched literally.
+// The trailing slash is made optional: fiber's default (non-strict)
+// routing treats "/api/v1/companies" and "/api/v1/companies/" as the same
+// route, and callers (including this app's own frontend) don't always
+// include it — the permission lookup has to be exactly as tolerant or a
+// perfectly legitimate request with/without a trailing slash falsely
+// looks "unclassified" and gets denied.
+func compileRoutePattern(pattern string) *regexp.Regexp {
+	trimmed := strings.TrimSuffix(pattern, "/")
+	segments := strings.Split(trimmed, "/")
+	for i, seg := range segments {
+		if strings.HasPrefix(seg, ":") {
+			segments[i] = `[^/]+`
+		} else {
+			segments[i] = regexp.QuoteMeta(seg)
+		}
+	}
+	return regexp.MustCompile("^" + strings.Join(segments, "/") + "/?$")
+}
+
+// lookupPermission finds the routePermissions entry matching an incoming
+// request, if any.
+func lookupPermission(method, path string) (perm string, ok bool) {
+	for _, r := range compiledRoutes {
+		if r.method == method && r.re.MatchString(path) {
+			return r.perm, true
+		}
+	}
+	return "", false
+}
+
 // RouteGuard enforces the routePermissions table as the last link in the
 // protected middleware chain.
 type RouteGuard struct {
@@ -209,11 +273,25 @@ func NewRouteGuard(rbac *RBACMiddleware) *RouteGuard {
 // not default-allow — since an omission here means nobody decided what
 // this route should require, and "nobody decided" must never mean
 // "anyone can call it."
+//
+// This intentionally does NOT use c.Route().Path: RouteGuard.Handle runs
+// as one of several handlers bundled into router.Setup's `protected`
+// group (a single fiber Use-registration covering every route under
+// /api/v1). Fiber only reassigns ctx.route to the terminal, endpoint-
+// specific route once execution actually reaches that route's own
+// Handlers slice (see fiber's Ctx.Next()/App.next()) — while still
+// inside a Use-bundled handler like this one, c.Route() reports the
+// bundle's own coarse registration path ("/api/v1"), not the endpoint
+// being called. That silently 403'd every single protected request
+// ("this route has no authorization policy configured") regardless of
+// which endpoint it hit, since "GET /api/v1" (etc.) was never a key in
+// routePermissions. Matching the live request path against the
+// pre-compiled patterns below sidesteps that entirely.
 func (g *RouteGuard) Handle(c fiber.Ctx) error {
-	key := c.Method() + " " + c.Route().Path
-
-	perm, ok := routePermissions[key]
+	method, path := c.Method(), c.Path()
+	perm, ok := lookupPermission(method, path)
 	if !ok {
+		key := method + " " + path
 		log.Printf("routeguard: DENY %s — no authorization policy registered for this route", key)
 		g.rbac.logDenial(c, GetUserID(c), GetOrgID(c), "unclassified route: "+key)
 		return fiber.NewError(fiber.StatusForbidden, "this route has no authorization policy configured")
