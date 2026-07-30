@@ -149,9 +149,10 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	protected.Post("/auth/sessions/revoke-all", authHandler.LogoutAllSessions)
 
 	// Organizations
-	orgHandler := handler.NewOrganizationHandler(service.NewOrganizationService(orgRepo))
+	orgHandler := handler.NewOrganizationHandler(service.NewOrganizationService(orgRepo, roleRepo, userRepo, cfg, db))
 	protected.Get("/organizations/current", orgHandler.GetCurrent)
-	protected.Patch("/organizations/current", orgHandler.Update)
+	protected.Patch("/organizations/current", orgHandler.Update, rl.Limit(middleware.RateLimitOrgSettings()))
+	protected.Post("/organizations/current/transfer-ownership", orgHandler.TransferOwnership, rl.Limit(middleware.RateLimitOrgSettings()))
 
 	// Profile
 	profileHandler := handler.NewProfileHandler(userRepo, authSvc)

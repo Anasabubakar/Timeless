@@ -93,3 +93,27 @@ func (r *RoleRepository) CountUsersWithRole(ctx context.Context, orgID uuid.UUID
 		Count(&count).Error
 	return count, err
 }
+
+// HasRole reports whether a user currently holds the named role within
+// an organization — the read-only counterpart to AssignRole/RevokeRole,
+// used to gate Owner-only actions (org settings identity changes,
+// ownership transfer) without the caller needing to preload the user's
+// full Roles association.
+func (r *RoleRepository) HasRole(ctx context.Context, orgID, userID uuid.UUID, roleName string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("user_roles").
+		Joins("JOIN roles ON roles.id = user_roles.role_id").
+		Where("roles.organization_id = ? AND roles.name = ? AND user_roles.user_id = ?", orgID, roleName, userID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// RevokeRole unlinks a user from a role — the inverse of AssignRole,
+// used by ownership transfer to strip Owner from the outgoing owner
+// after granting it to the incoming one.
+func (r *RoleRepository) RevokeRole(ctx context.Context, userID, roleID uuid.UUID) error {
+	return r.db.WithContext(ctx).Exec(
+		"DELETE FROM user_roles WHERE user_id = ? AND role_id = ?", userID, roleID,
+	).Error
+}

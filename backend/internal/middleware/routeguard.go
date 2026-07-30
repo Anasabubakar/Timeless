@@ -33,8 +33,9 @@ var routePermissions = map[string]string{
 	"DELETE /api/v1/auth/sessions/:id":      authOnly,
 	"POST /api/v1/auth/sessions/revoke-all": authOnly,
 
-	"GET /api/v1/organizations/current":   PermSettingsRead,
-	"PATCH /api/v1/organizations/current": PermSettingsWrite,
+	"GET /api/v1/organizations/current":                     PermSettingsRead,
+	"PATCH /api/v1/organizations/current":                   PermSettingsWrite,
+	"POST /api/v1/organizations/current/transfer-ownership": PermSettingsWrite,
 
 	"PATCH /api/v1/profile":         authOnly,
 	"POST /api/v1/profile/password": authOnly,
