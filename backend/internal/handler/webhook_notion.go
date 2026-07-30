@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/timeless/backend/internal/eventbus"
 	"github.com/timeless/backend/internal/service"
 )
 
@@ -24,10 +25,11 @@ const notionWebhookTokenKey = "notion:webhook:verification_token"
 type NotionWebhookHandler struct {
 	rdb *redis.Client
 	svc *service.IntegrationService
+	bus *eventbus.Bus
 }
 
-func NewNotionWebhookHandler(rdb *redis.Client, svc *service.IntegrationService) *NotionWebhookHandler {
-	return &NotionWebhookHandler{rdb: rdb, svc: svc}
+func NewNotionWebhookHandler(rdb *redis.Client, svc *service.IntegrationService, bus *eventbus.Bus) *NotionWebhookHandler {
+	return &NotionWebhookHandler{rdb: rdb, svc: svc, bus: bus}
 }
 
 type notionVerificationPing struct {
@@ -37,6 +39,10 @@ type notionVerificationPing struct {
 type notionWebhookEvent struct {
 	WorkspaceID string `json:"workspace_id"`
 	Type        string `json:"type"`
+	Entity      struct {
+		ID   string `json:"id"`
+		Type string `json:"type"`
+	} `json:"entity"`
 }
 
 // Receive handles both the one-time verification handshake and every
@@ -76,7 +82,23 @@ func (h *NotionWebhookHandler) Receive(c fiber.Ctx) error {
 	// Best-effort routing: if we can't match this workspace to a connected
 	// integration (e.g. it was disconnected), still ack 200 — there's
 	// nothing actionable to retry, and Notion isn't at fault.
-	_, _, _ = h.svc.EnqueueWebhookSync(c.Context(), "notion", event.WorkspaceID)
+	orgID, _, err := h.svc.EnqueueWebhookSync(c.Context(), "notion", event.WorkspaceID)
+
+	// The generic sync above is the coarse fallback (full incremental
+	// resync, eventually catches everything); when the event names a
+	// specific page, also publish a targeted pull so the mapping-engine
+	// sync pipeline converges immediately instead of waiting for the
+	// next resync.
+	if err == nil && h.bus != nil && event.Entity.Type == "page" && event.Entity.ID != "" {
+		_ = h.bus.Publish(c.Context(), eventbus.Event{
+			Type:  eventbus.NotionChanged,
+			OrgID: orgID.String(),
+			Data: map[string]interface{}{
+				"external_system": "notion",
+				"external_id":     event.Entity.ID,
+			},
+		})
+	}
 
 	return c.SendStatus(fiber.StatusOK)
 }
