@@ -149,7 +149,13 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	// this group existed, so authMw rejected every request with "missing
 	// authorization header" before the handler — which does its own JWT
 	// parsing from a query param — ever ran.
-	auditMw := middleware.AuditLog(middleware.AuditConfig{DB: db})
+	// Constructed here (ahead of the `protected` group, which needs it
+	// for auditMw below) rather than down with the WebSocket/SSE routes
+	// where it's also used — a single Hub instance is shared by both.
+	hub := realtime.NewHub()
+	go hub.Run()
+
+	auditMw := middleware.AuditLog(middleware.AuditConfig{DB: db, Hub: hub})
 	rbacMw := middleware.NewRBAC(db)
 	routeGuard := middleware.NewRouteGuard(rbacMw)
 	protected := api.Group("", authMw.Handle, middleware.ValidateOrigin(cfg.CORSOrigins()), rl.Limit(middleware.RateLimitAPI()), tenantMw.Handle, auditMw, routeGuard.Handle)
@@ -469,8 +475,6 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	emails.Post("/send-template", emailHandler.SendTemplate)
 
 	// Realtime (WebSocket + SSE)
-	hub := realtime.NewHub()
-	go hub.Run()
 	// Handlers are attached directly to this one route (not via a Group
 	// with an empty prefix) so they only ever run for "/ws" itself. An
 	// empty-prefix Group registers its middleware as a fiber Use at the

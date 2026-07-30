@@ -8,8 +8,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/adaptor"
-	"github.com/gorilla/websocket"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 )
 
 type EventType string
@@ -21,6 +21,15 @@ const (
 	EventAgentCompleted  EventType = "agent.completed"
 	EventNotification    EventType = "notification"
 	EventPipelineMove    EventType = "pipeline.move"
+	// EventActivity fires for every mutating request any member makes
+	// (see middleware.AuditLog) — the org-wide "so-and-so just did X"
+	// signal the realtime notification banner subscribes to. Deliberately
+	// generic (one event type covering every resource) rather than one
+	// event per entity kind: the banner only ever needs actor + verb +
+	// entity type to render "jane@co.com updated Sponsors", and a single
+	// type means the frontend doesn't need to know about new resource
+	// kinds as they're added.
+	EventActivity EventType = "activity"
 )
 
 type Event struct {

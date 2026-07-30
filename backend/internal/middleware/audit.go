@@ -11,10 +11,17 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/realtime"
 )
 
 type AuditConfig struct {
 	DB *gorm.DB
+	// Hub broadcasts an EventActivity to every other connected member of
+	// the org for every audited mutation, powering the realtime
+	// "so-and-so updated Sponsors" notification banner. Nil is valid
+	// (e.g. in tests) — broadcasting is skipped, only the DB write
+	// happens.
+	Hub *realtime.Hub
 }
 
 func AuditLog(cfg AuditConfig) fiber.Handler {
@@ -65,6 +72,26 @@ func AuditLog(cfg AuditConfig) fiber.Handler {
 		activity.ID = uuid.New()
 
 		go cfg.DB.Create(&activity)
+
+		// Only broadcast successful, non-read mutations — a failed write
+		// or a 4xx never actually changed anything another member's UI
+		// needs to react to (shouldAudit already let 5xx through so it
+		// still lands in the DB audit trail above, but nobody else's
+		// screen went stale because of it).
+		if cfg.Hub != nil && status < 300 {
+			actorEmail, _ := c.Locals("email").(string)
+			cfg.Hub.Publish(&realtime.Event{
+				Type:  realtime.EventActivity,
+				OrgID: orgID.String(),
+				Payload: map[string]interface{}{
+					"actor_email": actorEmail,
+					"action":      action,
+					"entity_type": entityType,
+					"entity_id":   entityID,
+					"subject":     subject,
+				},
+			})
+		}
 
 		return err
 	}
