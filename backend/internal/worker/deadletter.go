@@ -25,13 +25,10 @@ import (
 func NewDeadLetterHandler(db *gorm.DB, logger *slog.Logger) asynq.ErrorHandlerFunc {
 	return func(ctx context.Context, task *asynq.Task, err error) {
 		taskID, _ := asynq.GetTaskID(ctx)
-		retryCount, _ := asynq.GetRetryCount(ctx)
-		maxRetry, _ := asynq.GetMaxRetry(ctx)
+		retryCount, okRetry := asynq.GetRetryCount(ctx)
+		maxRetry, okMax := asynq.GetMaxRetry(ctx)
 
-		// asynq retries while retryCount < maxRetry; once this failure
-		// makes retryCount == maxRetry, there's no next attempt — this is
-		// the failure that dead-letters the task.
-		isFinal := retryCount >= maxRetry
+		isFinal := isLastAttempt(retryCount, maxRetry, okRetry, okMax)
 
 		logger.Error("task failed",
 			"task_type", task.Type(),
@@ -74,4 +71,19 @@ func NewDeadLetterHandler(db *gorm.DB, logger *slog.Logger) asynq.ErrorHandlerFu
 			logger.Error("failed to record dead-letter event", "error", err)
 		}
 	}
+}
+
+// isLastAttempt reports whether a failure at retryCount (out of
+// maxRetry) is the one that dead-letters the task — asynq retries while
+// retryCount < maxRetry, so once a failure makes retryCount == maxRetry
+// there's no next attempt. Both context values missing (okRetry/okMax
+// false, which shouldn't happen inside a real asynq processor — only in
+// a test or a future asynq version that changes this contract) is
+// treated as "don't know, assume not final" rather than defaulting to
+// the zero-value comparison 0 >= 0, which would misfire on every call.
+func isLastAttempt(retryCount, maxRetry int, okRetry, okMax bool) bool {
+	if !okRetry || !okMax {
+		return false
+	}
+	return retryCount >= maxRetry
 }
