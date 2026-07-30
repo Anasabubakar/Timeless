@@ -20,6 +20,15 @@ export interface OrgRole {
   is_system: boolean;
 }
 
+export interface PendingInvitation {
+  id: string;
+  email: string;
+  role: string;
+  invited_by_id: string;
+  expires_at: string;
+  created_at: string;
+}
+
 export function useTeamMembers() {
   return useQuery({
     queryKey: ["team", "members"],
@@ -34,13 +43,34 @@ export function useOrgRoles() {
   });
 }
 
+export function usePendingInvitations() {
+  return useQuery({
+    queryKey: ["team", "invitations"],
+    queryFn: () => api.get<{ data: PendingInvitation[] }>("/team/invitations"),
+  });
+}
+
+// useInviteMember now sends an actual invitation (emailed token) instead
+// of creating an account directly — the invited person doesn't exist as
+// a member until they accept it, so this invalidates the pending-
+// invitations list, not the member list.
 export function useInviteMember() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: { email: string; first_name: string; last_name: string; role: string }) =>
-      api.post("/team/members", data),
+      api.post<{ data: PendingInvitation }>("/team/members", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["team", "members"] });
+      queryClient.invalidateQueries({ queryKey: ["team", "invitations"] });
+    },
+  });
+}
+
+export function useRevokeInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/team/invitations/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["team", "invitations"] });
     },
   });
 }

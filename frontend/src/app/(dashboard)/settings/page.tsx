@@ -31,6 +31,7 @@ import {
   useUpdateOrganization,
   useUpdateProfile,
   useChangePassword,
+  useTransferOwnership,
 } from "@/queries/settings";
 import {
   useWebhooks,
@@ -43,7 +44,14 @@ import {
   type Webhook as WebhookType,
   type WebhookDelivery,
 } from "@/queries/webhooks";
-import { useTeamMembers, useInviteMember, useRemoveMember, useOrgRoles } from "@/queries/team";
+import {
+  useTeamMembers,
+  useInviteMember,
+  useRemoveMember,
+  useOrgRoles,
+  usePendingInvitations,
+  useRevokeInvitation,
+} from "@/queries/team";
 import { useNotificationPreferences, useUpdateNotificationPreference } from "@/queries/notifications";
 import { useImportCompanies, useImportContacts, useImportSponsors, type ImportResult } from "@/queries/import";
 type Tab = "organization" | "profile" | "team" | "notifications" | "webhooks" | "import";
@@ -490,6 +498,11 @@ function OrgSettings() {
   const { data, isLoading } = useCurrentOrganization();
   const updateOrg = useUpdateOrganization();
   const [form, setForm] = useState({ name: "", slug: "", domain: "" });
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   const org = data?.organization;
 
@@ -511,13 +524,63 @@ function OrgSettings() {
     );
   }
 
+  // Renaming, changing the slug, or rotating the password are identity
+  // changes the backend requires Owner + the current organization
+  // password to authorize (OrganizationService.UpdateSecure) — domain is
+  // not, so it's the only field that can be saved without either.
+  const identityChanged = org != null && (form.name !== org.name || form.slug !== org.slug);
+  const touchesIdentity = identityChanged || showPasswordChange;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateOrg.mutate({
-      name: form.name,
-      slug: form.slug,
-      domain: form.domain,
-    });
+    setPasswordError("");
+
+    if (showPasswordChange) {
+      if (newPassword.length < 8) {
+        setPasswordError("New password must be at least 8 characters");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setPasswordError("New password and confirmation don't match");
+        return;
+      }
+    }
+
+    if (touchesIdentity) {
+      const summary = [
+        identityChanged && form.name !== org?.name ? `rename the organization to "${form.name}"` : null,
+        identityChanged && form.slug !== org?.slug ? `change its slug to "${form.slug}"` : null,
+        showPasswordChange ? "change the organization password" : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      if (!confirm(`You're about to ${summary}. This affects everyone in your organization. Continue?`)) {
+        return;
+      }
+      if (!currentPassword) {
+        setPasswordError("Enter the current organization password to confirm this change");
+        return;
+      }
+    }
+
+    updateOrg.mutate(
+      {
+        name: form.name,
+        slug: form.slug,
+        domain: form.domain,
+        ...(touchesIdentity ? { current_password: currentPassword } : {}),
+        ...(showPasswordChange ? { password: newPassword } : {}),
+      },
+      {
+        onSuccess: () => {
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirmPassword("");
+          setShowPasswordChange(false);
+        },
+        onError: (err: any) => setPasswordError(err.message || "Failed to update organization"),
+      }
+    );
   };
 
   return (
@@ -549,6 +612,59 @@ function OrgSettings() {
         </FieldGroup>
       </SettingsSection>
 
+      <SettingsSection title="Organization Password">
+        <p className="text-xs text-muted-foreground">
+          Teammates need this password to join {org?.name ?? "your organization"}. Only an Owner can change it, and
+          doing so — or renaming the organization, or changing its slug — requires re-entering the current password.
+        </p>
+
+        {!showPasswordChange ? (
+          <button
+            type="button"
+            onClick={() => setShowPasswordChange(true)}
+            className="h-8 rounded-lg border border-neutral-200 px-3 text-xs font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            Change organization password
+          </button>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FieldGroup label="New organization password">
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={8}
+                placeholder="Min 8 characters"
+                className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:bg-neutral-900"
+              />
+            </FieldGroup>
+            <FieldGroup label="Confirm new password">
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                minLength={8}
+                className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:bg-neutral-900"
+              />
+            </FieldGroup>
+          </div>
+        )}
+
+        {touchesIdentity && (
+          <FieldGroup label="Current organization password">
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Required to save this change"
+              className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:bg-neutral-900"
+            />
+          </FieldGroup>
+        )}
+
+        {passwordError && <p className="text-xs text-destructive">{passwordError}</p>}
+      </SettingsSection>
+
       <div className="flex items-center justify-end gap-2">
         {updateOrg.isSuccess && (
           <span className="flex items-center gap-1 text-xs text-emerald-600">
@@ -563,7 +679,92 @@ function OrgSettings() {
           {updateOrg.isPending ? "Saving..." : "Save Changes"}
         </button>
       </div>
+
+      <TransferOwnershipSection />
     </form>
+  );
+}
+
+function TransferOwnershipSection() {
+  const { data: membersData } = useTeamMembers();
+  const transferOwnership = useTransferOwnership();
+  const [newOwnerId, setNewOwnerId] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const members = (membersData?.data ?? []).filter((m) => !m.roles?.includes("Owner"));
+
+  const handleTransfer = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess(false);
+    if (!newOwnerId) return;
+    const target = members.find((m) => m.id === newOwnerId);
+    if (!confirm(`Transfer ownership to ${target?.email ?? "this member"}? You'll be demoted to Admin. This cannot be undone by you alone.`)) {
+      return;
+    }
+    transferOwnership.mutate(
+      { new_owner_id: newOwnerId, current_password: currentPassword },
+      {
+        onSuccess: () => {
+          setSuccess(true);
+          setNewOwnerId("");
+          setCurrentPassword("");
+        },
+        onError: (err: any) => setError(err.message || "Failed to transfer ownership"),
+      }
+    );
+  };
+
+  if (members.length === 0) return null;
+
+  return (
+    <SettingsSection title="Transfer Ownership">
+      <p className="text-xs text-muted-foreground">
+        Moving ownership hands full control of {`the organization`} to another member and demotes you to Admin.
+        Owner-only, and requires the current organization password.
+      </p>
+      <form onSubmit={handleTransfer} className="space-y-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FieldGroup label="New owner">
+            <select
+              value={newOwnerId}
+              onChange={(e) => setNewOwnerId(e.target.value)}
+              className="h-9 w-full rounded-[10px] border border-neutral-200 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:bg-neutral-900"
+            >
+              <option value="">Select a member</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.first_name} {m.last_name} ({m.email})
+                </option>
+              ))}
+            </select>
+          </FieldGroup>
+          <FieldGroup label="Current organization password">
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-neutral-900/10 dark:border-neutral-700 dark:bg-neutral-900"
+            />
+          </FieldGroup>
+        </div>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        {success && (
+          <p className="flex items-center gap-1 text-xs text-emerald-600">
+            <Check className="h-3 w-3" /> Ownership transferred
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={transferOwnership.isPending || !newOwnerId || !currentPassword}
+          className="h-8 rounded-lg border border-destructive/30 px-3 text-xs font-medium text-destructive hover:bg-destructive/5 disabled:opacity-50"
+        >
+          {transferOwnership.isPending ? "Transferring..." : "Transfer ownership"}
+        </button>
+      </form>
+    </SettingsSection>
   );
 }
 
@@ -847,7 +1048,56 @@ function TeamSettings() {
           </div>
         )}
       </SettingsSection>
+
+      <PendingInvitationsSection />
     </div>
+  );
+}
+
+function PendingInvitationsSection() {
+  const { data, isLoading } = usePendingInvitations();
+  const revokeInvitation = useRevokeInvitation();
+  const invitations = data?.data ?? [];
+
+  if (!isLoading && invitations.length === 0) return null;
+
+  return (
+    <SettingsSection title="Pending Invitations">
+      {isLoading ? (
+        <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" /> Loading invitations...
+        </div>
+      ) : (
+        <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
+          {invitations.map((inv) => (
+            <div key={inv.id} className="flex items-center justify-between py-3">
+              <div>
+                <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{inv.email}</p>
+                <p className="text-xs text-muted-foreground">
+                  Invited as {inv.role} · expires {new Date(inv.expires_at).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                  pending
+                </span>
+                <button
+                  onClick={() => {
+                    if (confirm(`Revoke the invitation for ${inv.email}?`)) {
+                      revokeInvitation.mutate(inv.id);
+                    }
+                  }}
+                  className="rounded p-1 text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                  title="Revoke invitation"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </SettingsSection>
   );
 }
 

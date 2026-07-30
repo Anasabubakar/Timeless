@@ -11,14 +11,32 @@ export function useCurrentOrganization() {
   });
 }
 
+export interface UpdateOrganizationInput extends Partial<Organization> {
+  // Required by the backend whenever name/slug/password is being
+  // changed (OrganizationService.UpdateSecure) — Owner-only, and this is
+  // how the frontend proves the caller actually knows the org's current
+  // password rather than relying solely on their session being valid.
+  current_password?: string;
+  // New organization password, if rotating it. Never present in the
+  // Organization type returned by the API (write-only).
+  password?: string;
+}
+
 export function useUpdateOrganization() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<Organization>) =>
+    mutationFn: (data: UpdateOrganizationInput) =>
       api.patch<{ organization: Organization }>("/organizations/current", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["organization"] });
     },
+  });
+}
+
+export function useTransferOwnership() {
+  return useMutation({
+    mutationFn: (data: { new_owner_id: string; current_password: string }) =>
+      api.post<{ message: string }>("/organizations/current/transfer-ownership", data),
   });
 }
 

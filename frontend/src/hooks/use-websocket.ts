@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth';
+import { useRealtimeStore } from '@/stores/realtime';
 
 type EventType =
   | 'sponsor.updated'
@@ -8,7 +9,8 @@ type EventType =
   | 'campaign.updated'
   | 'agent.completed'
   | 'notification'
-  | 'pipeline.move';
+  | 'pipeline.move'
+  | 'activity';
 
 interface WSEvent {
   type: EventType;
@@ -24,12 +26,18 @@ const QUERY_INVALIDATION_MAP: Record<EventType, string[]> = {
   'agent.completed': ['ai-agents'],
   'notification': [],
   'pipeline.move': ['sponsors'],
+  // 'activity' drives the notification banner (see RealtimeActivityBanner)
+  // rather than an automatic silent refetch — the whole point is to ask
+  // the user before replacing what's on their screen, not do it for them.
+  'activity': [],
 };
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const queryClient = useQueryClient();
   const token = useAuthStore((s) => s.tokens?.access_token);
+  const currentUserEmail = useAuthStore((s) => s.user?.email);
+  const pushActivity = useRealtimeStore((s) => s.push);
 
   const connect = useCallback(() => {
     if (!token) return;
@@ -44,6 +52,22 @@ export function useWebSocket() {
     ws.onmessage = (event) => {
       try {
         const data: WSEvent = JSON.parse(event.data);
+
+        if (data.type === 'activity') {
+          const actorEmail = String(data.payload.actor_email ?? '');
+          // Don't notify someone about their own edit — they already
+          // know, and it'd otherwise flash a banner after every save.
+          if (actorEmail && actorEmail !== currentUserEmail) {
+            pushActivity({
+              actorEmail,
+              action: String(data.payload.action ?? 'updated'),
+              entityType: String(data.payload.entity_type ?? ''),
+              subject: String(data.payload.subject ?? ''),
+            });
+          }
+          return;
+        }
+
         const keys = QUERY_INVALIDATION_MAP[data.type];
         if (keys) {
           keys.forEach((key) => {
@@ -65,7 +89,7 @@ export function useWebSocket() {
     };
 
     wsRef.current = ws;
-  }, [token, queryClient]);
+  }, [token, queryClient, currentUserEmail, pushActivity]);
 
   useEffect(() => {
     connect();
