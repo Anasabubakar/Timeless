@@ -4,7 +4,26 @@
 // silently creating three duplicates.
 package normalize
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
+
+var (
+	slugInvalidRun = regexp.MustCompile(`[^a-z0-9]+`)
+	slugTrimDashes = regexp.MustCompile(`^-+|-+$`)
+)
+
+// Slug lowercases a name into a URL-safe, hyphenated form ("Acme, Inc."
+// -> "acme-inc") — the server-side twin of the frontend's slugify so a
+// client that skips or tampers with the derived org_slug still gets a
+// consistent, well-formed one. This alone does not guarantee uniqueness;
+// two different orgs can slugify to the same value, which callers must
+// handle separately (see service.uniqueOrgSlug).
+func Slug(name string) string {
+	s := slugInvalidRun.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-")
+	return slugTrimDashes.ReplaceAllString(s, "")
+}
 
 // Email lowercases and trims — email addresses are case-insensitive at the
 // domain part and conventionally treated so at the local part too for
