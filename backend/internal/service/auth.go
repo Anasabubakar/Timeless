@@ -24,9 +24,16 @@ import (
 	"github.com/timeless/backend/internal/email"
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/normalize"
 	"github.com/timeless/backend/internal/repository"
 	"github.com/timeless/backend/internal/security"
 )
+
+// maxSlugAttempts bounds the unique-org-slug retry loop in Register — a
+// generous ceiling for what should almost always resolve on the first or
+// second try; existing purely as a backstop against an unbounded loop if
+// something is systematically wrong (e.g. the slug column itself broken).
+const maxSlugAttempts = 20
 
 type AuthService struct {
 	userRepo        *repository.UserRepository
@@ -165,7 +172,9 @@ type AuthTokens struct {
 }
 
 func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta SessionMeta) (*models.User, *AuthTokens, error) {
-	existing, _ := s.userRepo.FindByEmail(ctx, input.Email)
+	normalizedEmail := normalize.Email(input.Email)
+
+	existing, _ := s.userRepo.FindByEmail(ctx, normalizedEmail)
 	if existing != nil {
 		return nil, nil, errors.New("email already registered")
 	}
@@ -175,40 +184,50 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 		return nil, nil, err
 	}
 
-	org := &models.Organization{
-		Name: input.OrgName,
-		Slug: input.OrgSlug,
-		Plan: "free",
-	}
-	if err := s.orgRepo.Create(ctx, org); err != nil {
-		return nil, nil, err
-	}
+	var user *models.User
+	var org *models.Organization
 
-	hashStr := string(hash)
-	user := &models.User{
-		OrganizationID: org.ID,
-		Email:          input.Email,
-		PasswordHash:   &hashStr,
-		FirstName:      input.FirstName,
-		LastName:       input.LastName,
-		Status:         "active",
-		EmailVerified:  false,
-	}
-	if err := s.userRepo.Create(ctx, user); err != nil {
-		return nil, nil, err
-	}
+	// Organization creation, user creation, and owner-role provisioning
+	// must succeed or fail together — a partial write here would leave
+	// either an orphaned organization with no owner, or a user with no
+	// role who (with RBAC enforced on every route) is locked out of the
+	// account they just created.
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		orgRepoTx := repository.NewOrganizationRepository(tx)
+		userRepoTx := repository.NewUserRepository(tx)
+		roleRepoTx := repository.NewRoleRepository(tx)
 
-	// The registering user becomes the org's Owner. This must succeed —
-	// unlike the best-effort email send below, an account created
-	// without a role would have zero permissions and (with RBAC enforced
-	// on routes) be locked out of the organization it just created, so a
-	// failure here fails registration rather than leaving a broken account.
-	ownerRoleID, err := s.roleRepo.SeedDefaultRoles(ctx, org.ID)
+		var txErr error
+		org, txErr = createOrgWithUniqueSlug(ctx, orgRepoTx, input.OrgName, input.OrgSlug)
+		if txErr != nil {
+			return txErr
+		}
+
+		hashStr := string(hash)
+		user = &models.User{
+			OrganizationID: org.ID,
+			Email:          normalizedEmail,
+			PasswordHash:   &hashStr,
+			FirstName:      input.FirstName,
+			LastName:       input.LastName,
+			Status:         "active",
+			EmailVerified:  false,
+		}
+		if err := userRepoTx.Create(ctx, user); err != nil {
+			return err
+		}
+
+		ownerRoleID, err := roleRepoTx.SeedDefaultRoles(ctx, org.ID)
+		if err != nil {
+			return fmt.Errorf("failed to provision organization roles: %w", err)
+		}
+		if err := roleRepoTx.AssignRole(ctx, user.ID, ownerRoleID); err != nil {
+			return fmt.Errorf("failed to assign owner role: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to provision organization roles: %w", err)
-	}
-	if err := s.roleRepo.AssignRole(ctx, user.ID, ownerRoleID); err != nil {
-		return nil, nil, fmt.Errorf("failed to assign owner role: %w", err)
+		return nil, nil, err
 	}
 
 	s.issueEmailVerification(ctx, user)
@@ -219,6 +238,74 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 	}
 
 	return user, tokens, nil
+}
+
+// createOrgWithUniqueSlug inserts a new organization, retrying with a
+// randomized suffix whenever the chosen slug collides. Two different
+// organizations legitimately named "Acme" (or any client racing another
+// signup for the exact same name) must never surface a raw SQL error —
+// they should each simply get a working, unique slug ("acme",
+// "acme-4f2a", ...).
+//
+// A SELECT-then-INSERT existence check alone can't close the race: two
+// concurrent transactions can both pass the check for the same candidate
+// before either commits. So this instead attempts the INSERT directly
+// and only reacts to an actual unique-constraint violation from Postgres
+// — the one thing that's atomic and authoritative — retrying with a new
+// candidate when that happens, rather than trusting a prior read.
+func createOrgWithUniqueSlug(ctx context.Context, orgRepo *repository.OrganizationRepository, name, requestedSlug string) (*models.Organization, error) {
+	base := normalize.Slug(requestedSlug)
+	if base == "" {
+		base = normalize.Slug(name)
+	}
+	if base == "" {
+		base = "org"
+	}
+
+	for attempt := 0; attempt < maxSlugAttempts; attempt++ {
+		slug := base
+		if attempt > 0 {
+			suffix, err := randomSlugSuffix()
+			if err != nil {
+				return nil, err
+			}
+			slug = base + "-" + suffix
+		}
+
+		org := &models.Organization{Name: name, Slug: slug, Plan: "free"}
+		err := orgRepo.Create(ctx, org)
+		if err == nil {
+			return org, nil
+		}
+		// Matches any unique violation, not just a specific constraint
+		// name: GORM's AutoMigrate (the actual schema mechanism this app
+		// boots with — see internal/database/migrate.go) names a
+		// uniqueIndex tag "idx_<table>_<column>", but a hand-run copy of
+		// the documented .sql migrations would instead get Postgres's
+		// own default "organizations_slug_key" from the column-level
+		// UNIQUE constraint. The org insert above is the only thing in
+		// this function that could hit a unique constraint at all, so
+		// there's no ambiguity in treating any violation here as "slug
+		// taken, retry" — hardcoding one specific name risked silently
+		// turning every collision into a hard failure if the schema was
+		// ever provisioned the other way.
+		if !repository.IsUniqueViolation(err, "") {
+			return nil, fmt.Errorf("failed to create organization: %w", err)
+		}
+		// Slug taken by a concurrent or prior signup — loop and retry
+		// with a new random suffix.
+	}
+	return nil, errors.New("could not generate a unique organization slug, please try again")
+}
+
+// randomSlugSuffix returns a short random hex string for disambiguating
+// a collided organization slug.
+func randomSlugSuffix() (string, error) {
+	buf := make([]byte, 3)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 // issueEmailVerification creates a fresh verification token (invalidating
@@ -278,7 +365,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, token string) error {
 // Always returns nil regardless of whether the address exists or is
 // already verified, so this endpoint can't be used to enumerate accounts.
 func (s *AuthService) ResendVerification(ctx context.Context, emailAddr string) error {
-	user, err := s.userRepo.FindByEmail(ctx, emailAddr)
+	user, err := s.userRepo.FindByEmail(ctx, normalize.Email(emailAddr))
 	if err != nil || user.EmailVerified {
 		return nil
 	}
@@ -296,7 +383,7 @@ var ErrAccountLocked = errors.New("account is temporarily locked due to too many
 var ErrMFARequired = errors.New("mfa verification required")
 
 func (s *AuthService) Login(ctx context.Context, input LoginInput, meta SessionMeta) (*models.User, *AuthTokens, error) {
-	user, err := s.userRepo.FindByEmail(ctx, input.Email)
+	user, err := s.userRepo.FindByEmail(ctx, normalize.Email(input.Email))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil, errors.New("invalid credentials")
@@ -482,7 +569,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*A
 // returns nil (like ResendVerification) to avoid revealing whether the
 // address has an account.
 func (s *AuthService) ForgotPassword(ctx context.Context, emailAddr, requestIP string) error {
-	user, err := s.userRepo.FindByEmail(ctx, emailAddr)
+	user, err := s.userRepo.FindByEmail(ctx, normalize.Email(emailAddr))
 	if err != nil {
 		return nil
 	}
