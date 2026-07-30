@@ -35,10 +35,13 @@ import (
 const aiRequestTimeout = 45 * time.Second
 
 func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerClient *worker.Client) {
-	// Health check
-	app.Get("/health", func(c fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "ok", "service": "timeless-api"})
-	})
+	// Health/readiness/liveness. /health is kept as an alias of /health/live
+	// for anything (existing uptime monitors, load balancer config) still
+	// pointed at the old single endpoint.
+	healthHandler := handler.NewHealthHandler(db, rdb)
+	app.Get("/health", healthHandler.Live)
+	app.Get("/health/live", healthHandler.Live)
+	app.Get("/health/ready", healthHandler.Ready)
 
 	// Middleware instances
 	authMw := middleware.NewAuth(cfg)
