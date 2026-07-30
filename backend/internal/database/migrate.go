@@ -34,6 +34,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.PasswordResetToken{},
 		&models.Team{},
 		&models.TeamMember{},
+		&models.Invitation{},
 		&models.Industry{},
 		&models.Company{},
 		&models.PainPoint{},
