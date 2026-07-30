@@ -49,6 +49,7 @@ func main() {
 			},
 			Logger:         &asynqLogger{logger: logger},
 			RetryDelayFunc: rateLimitAwareRetryDelay,
+			ErrorHandler:   worker.NewDeadLetterHandler(db, logger),
 		},
 	)
 
