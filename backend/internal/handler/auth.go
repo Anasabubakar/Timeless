@@ -106,7 +106,7 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 		return verr
 	}
 
-	_ = h.svc.Logout(c.Context(), body.RefreshToken)
+	_ = h.svc.Logout(c.Context(), body.RefreshToken, middleware.GetOrgID(c), middleware.GetUserID(c), c.IP())
 	return c.JSON(fiber.Map{"message": "logged out"})
 }
 
@@ -135,7 +135,7 @@ func (h *AuthHandler) ResetPassword(c fiber.Ctx) error {
 		return verr
 	}
 
-	if err := h.svc.ResetPassword(c.Context(), body.Token, body.NewPassword); err != nil {
+	if err := h.svc.ResetPassword(c.Context(), body.Token, body.NewPassword, c.IP()); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
@@ -223,7 +223,7 @@ func (h *AuthHandler) ConfirmMFA(c fiber.Ctx) error {
 		return verr
 	}
 
-	if err := h.svc.ConfirmMFA(c.Context(), userID, body.Code); err != nil {
+	if err := h.svc.ConfirmMFA(c.Context(), userID, body.Code, c.IP()); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 	return c.JSON(fiber.Map{"message": "mfa enabled"})
@@ -244,7 +244,7 @@ func (h *AuthHandler) DisableMFA(c fiber.Ctx) error {
 		return verr
 	}
 
-	if err := h.svc.DisableMFA(c.Context(), userID, body.Password); err != nil {
+	if err := h.svc.DisableMFA(c.Context(), userID, body.Password, c.IP()); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 	return c.JSON(fiber.Map{"message": "mfa disabled"})
@@ -274,7 +274,7 @@ func (h *AuthHandler) RevokeSession(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid session id")
 	}
 
-	if err := h.svc.RevokeSession(c.Context(), userID, sessionID); err != nil {
+	if err := h.svc.RevokeSession(c.Context(), userID, sessionID, middleware.GetOrgID(c), c.IP()); err != nil {
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
 	}
 	return c.JSON(fiber.Map{"message": "session revoked"})
@@ -286,7 +286,7 @@ func (h *AuthHandler) LogoutAllSessions(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
 	}
 
-	if err := h.svc.LogoutAllSessions(c.Context(), userID); err != nil {
+	if err := h.svc.LogoutAllSessions(c.Context(), userID, middleware.GetOrgID(c), c.IP()); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to revoke sessions")
 	}
 	return c.JSON(fiber.Map{"message": "logged out of all sessions"})

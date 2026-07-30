@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/email"
+	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
 	"github.com/timeless/backend/internal/repository"
 	"github.com/timeless/backend/internal/security"
@@ -38,6 +40,10 @@ type AuthService struct {
 	mailer          *email.Sender
 	cipher          *security.CredentialCipher
 	keyring         *security.JWTKeyring
+	// db is used only for security-event audit logging
+	// (middleware.LogSecurityEvent) — every other read/write goes
+	// through the repositories above.
+	db *gorm.DB
 }
 
 func NewAuthService(
@@ -50,6 +56,7 @@ func NewAuthService(
 	cfg *config.Config,
 	rdb *redis.Client,
 	mailer *email.Sender,
+	db *gorm.DB,
 ) *AuthService {
 	return &AuthService{
 		userRepo:        userRepo,
@@ -63,7 +70,19 @@ func NewAuthService(
 		mailer:          mailer,
 		cipher:          security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...),
 		keyring:         security.NewJWTKeyring(cfg.JWTSecret, cfg.JWTSecretPrevious...),
+		db:              db,
 	}
+}
+
+// auditAuth is a thin wrapper around middleware.LogSecurityEvent for
+// the auth events this service is the sole source of truth for (login,
+// logout, MFA, password changes) — none of them pass through
+// AuditLog/RouteGuard's fiber.Ctx-based logging, since /auth/* mostly
+// lives outside the RBAC-guarded route table entirely, and login in
+// particular must be audited even when it fails (AuditLog only ever
+// logs 2xx responses).
+func (s *AuthService) auditAuth(orgID uuid.UUID, userID *uuid.UUID, eventType, subject, ip string, metadata map[string]string) {
+	middleware.LogSecurityEvent(s.db, orgID, userID, "auth", eventType, subject, ip, metadata)
 }
 
 // signJWT signs claims with the current keyring key and tags the token
@@ -286,6 +305,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput, meta SessionM
 	}
 
 	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
+		s.auditAuth(user.OrganizationID, &user.ID, "login_blocked", "login attempt while account locked", meta.IP, nil)
 		return nil, nil, ErrAccountLocked
 	}
 
@@ -294,7 +314,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput, meta SessionM
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(input.Password)); err != nil {
-		s.recordFailedLogin(ctx, user)
+		s.recordFailedLogin(ctx, user, meta.IP, "wrong password")
 		return nil, nil, errors.New("invalid credentials")
 	}
 
@@ -364,19 +384,32 @@ func (s *AuthService) completeLogin(ctx context.Context, user *models.User, meta
 	user.LockedUntil = nil
 	_ = s.userRepo.Update(ctx, user)
 
+	s.auditAuth(user.OrganizationID, &user.ID, "login_success", "signed in", meta.IP, map[string]string{
+		"remember_me": strconv.FormatBool(meta.RememberMe),
+	})
+
 	return user, tokens, nil
 }
 
 // recordFailedLogin increments the failure counter and locks the account
 // once it crosses cfg.MaxFailedLogins. Errors updating the counter are
 // logged, not returned — a persistence hiccup here must not turn into
-// "you're locked out forever" nor silently disable lockout.
-func (s *AuthService) recordFailedLogin(ctx context.Context, user *models.User) {
+// "you're locked out forever" nor silently disable lockout. reason is
+// purely descriptive (audit metadata) — wrong password vs a failed MFA
+// code both count toward the same lockout counter.
+func (s *AuthService) recordFailedLogin(ctx context.Context, user *models.User, ip, reason string) {
 	user.FailedLoginCount++
+	locked := false
 	if user.FailedLoginCount >= s.cfg.MaxFailedLogins {
 		until := time.Now().Add(s.cfg.LoginLockoutDuration)
 		user.LockedUntil = &until
+		locked = true
 	}
+	s.auditAuth(user.OrganizationID, &user.ID, "login_failure", "failed login: "+reason, ip, map[string]string{
+		"reason":             reason,
+		"failed_count":       strconv.Itoa(user.FailedLoginCount),
+		"account_now_locked": strconv.FormatBool(locked),
+	})
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		log.Printf("auth: failed to persist failed-login count for user %s: %v", user.ID, err)
 	}
@@ -481,7 +514,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, emailAddr, requestIP s
 // ResetPassword redeems a reset token, sets a new password, and revokes
 // every existing session (refresh token) for the user — a leaked password
 // being reset shouldn't leave an attacker's session alive.
-func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
+func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword, ip string) error {
 	if len(newPassword) < 8 {
 		return errors.New("password must be at least 8 characters")
 	}
@@ -520,6 +553,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 		log.Printf("auth: failed to revoke sessions for user %s after password reset: %v", user.ID, err)
 	}
 
+	s.auditAuth(user.OrganizationID, &user.ID, "password_reset", "password reset via emailed token", ip, nil)
 	s.sendAuthEmail(ctx, email.PasswordChangedEmail(user.Email, s.cfg.SMTPFrom, s.cfg.SMTPFromName))
 	return nil
 }
@@ -527,7 +561,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 // DisableMFA requires the current password as re-authentication before
 // turning MFA off — otherwise a hijacked, already-authenticated session
 // alone would be enough to strip account protection.
-func (s *AuthService) DisableMFA(ctx context.Context, userID uuid.UUID, currentPassword string) error {
+func (s *AuthService) DisableMFA(ctx context.Context, userID uuid.UUID, currentPassword, ip string) error {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return errors.New("user not found")
@@ -540,7 +574,12 @@ func (s *AuthService) DisableMFA(ctx context.Context, userID uuid.UUID, currentP
 	user.MFASecretEncrypted = nil
 	user.MFABackupCodesHash = datatypes.JSON("[]")
 	user.MFAEnrolledAt = nil
-	return s.userRepo.Update(ctx, user)
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	s.auditAuth(user.OrganizationID, &user.ID, "mfa_disabled", "MFA disabled", ip, nil)
+	return nil
 }
 
 // VerifyMFALogin completes a login that Login() paused with ErrMFARequired.
@@ -575,7 +614,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, ticket, code string, m
 		return s.completeLogin(ctx, user, meta)
 	}
 
-	s.recordFailedLogin(ctx, user)
+	s.recordFailedLogin(ctx, user, meta.IP, "invalid mfa code")
 	return nil, nil, errors.New("invalid verification code")
 }
 
@@ -604,12 +643,14 @@ func (s *AuthService) consumeBackupCode(ctx context.Context, user *models.User, 
 	return false
 }
 
-func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+func (s *AuthService) Logout(ctx context.Context, refreshToken string, orgID, userID uuid.UUID, ip string) error {
 	s.rdb.Set(ctx, "blacklist:"+refreshToken, "1", 7*24*time.Hour)
 
 	if session, err := s.sessionRepo.FindByTokenHash(ctx, hashToken(refreshToken)); err == nil {
 		_ = s.sessionRepo.Revoke(ctx, session.ID)
 	}
+
+	s.auditAuth(orgID, &userID, "logout", "signed out", ip, nil)
 	return nil
 }
 
@@ -622,14 +663,18 @@ func (s *AuthService) ListSessions(ctx context.Context, userID uuid.UUID) ([]mod
 // RevokeSession lets a user sign a single device out remotely. Verifies
 // the session belongs to the requesting user so one account can't revoke
 // another's session by guessing an ID.
-func (s *AuthService) RevokeSession(ctx context.Context, userID, sessionID uuid.UUID) error {
+func (s *AuthService) RevokeSession(ctx context.Context, userID, sessionID, orgID uuid.UUID, ip string) error {
 	sessions, err := s.sessionRepo.ListActiveByUser(ctx, userID)
 	if err != nil {
 		return err
 	}
 	for _, sess := range sessions {
 		if sess.ID == sessionID {
-			return s.sessionRepo.Revoke(ctx, sessionID)
+			if err := s.sessionRepo.Revoke(ctx, sessionID); err != nil {
+				return err
+			}
+			s.auditAuth(orgID, &userID, "session_revoked", "session revoked", ip, map[string]string{"session_id": sessionID.String()})
+			return nil
 		}
 	}
 	return errors.New("session not found")
@@ -637,8 +682,12 @@ func (s *AuthService) RevokeSession(ctx context.Context, userID, sessionID uuid.
 
 // LogoutAllSessions revokes every session for the user ("log out
 // everywhere"), e.g. after the user notices unfamiliar activity.
-func (s *AuthService) LogoutAllSessions(ctx context.Context, userID uuid.UUID) error {
-	return s.sessionRepo.RevokeAllForUser(ctx, userID)
+func (s *AuthService) LogoutAllSessions(ctx context.Context, userID, orgID uuid.UUID, ip string) error {
+	if err := s.sessionRepo.RevokeAllForUser(ctx, userID); err != nil {
+		return err
+	}
+	s.auditAuth(orgID, &userID, "logout_all", "logged out of all sessions", ip, nil)
+	return nil
 }
 
 func (s *AuthService) GetUser(ctx context.Context, userID uuid.UUID) (*models.User, error) {
@@ -707,7 +756,7 @@ func (s *AuthService) EnrollMFA(ctx context.Context, userID uuid.UUID) (*MFAEnro
 
 // ConfirmMFA proves the user's authenticator app is correctly loaded with
 // the pending secret before MFA actually gates future logins.
-func (s *AuthService) ConfirmMFA(ctx context.Context, userID uuid.UUID, code string) error {
+func (s *AuthService) ConfirmMFA(ctx context.Context, userID uuid.UUID, code, ip string) error {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return errors.New("user not found")
@@ -727,7 +776,12 @@ func (s *AuthService) ConfirmMFA(ctx context.Context, userID uuid.UUID, code str
 	now := time.Now()
 	user.MFAEnabled = true
 	user.MFAEnrolledAt = &now
-	return s.userRepo.Update(ctx, user)
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	s.auditAuth(user.OrganizationID, &user.ID, "mfa_enabled", "MFA enabled", ip, nil)
+	return nil
 }
 
 // SessionMeta describes the device/request a login or token refresh came
