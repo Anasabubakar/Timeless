@@ -181,7 +181,10 @@ func (h *IntegrationHandler) ZapierApps(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
 	apps, agentic, err := h.svc.DiscoverConnectedApps(c.Context(), orgID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		// Wraps a live call to Zapier's MCP endpoint — the error can
+		// carry Zapier's raw response.
+		logging.Printf("integration: zapier app discovery failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusBadGateway, "could not reach Zapier — try again shortly")
 	}
 	return c.JSON(fiber.Map{"data": apps, "agentic_mode": agentic})
 }
@@ -222,7 +225,10 @@ func (h *IntegrationHandler) PushNotionPage(c fiber.Ctx) error {
 		if errors.As(err, &conflictErr) {
 			return fiber.NewError(fiber.StatusConflict, conflictErr.Error())
 		}
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		// Anything else here wraps a live Notion API call — the error
+		// can carry Notion's raw response.
+		logging.Printf("integration: push to notion page %s failed for org %s: %v", pageID, orgID, err)
+		return fiber.NewError(fiber.StatusBadGateway, "could not update the Notion page — try again shortly")
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

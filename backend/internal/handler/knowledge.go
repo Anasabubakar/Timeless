@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/timeless/backend/internal/ai/memory"
+	"github.com/timeless/backend/internal/logging"
 	"github.com/timeless/backend/internal/middleware"
 )
 
@@ -35,7 +36,8 @@ func (h *KnowledgeHandler) SemanticSearch(c fiber.Ctx) error {
 
 	nodes, err := h.store.SearchNodes(c.Context(), orgID, query, memory.NodeType(nodeType), limit)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Search failed: "+err.Error())
+		logging.Printf("knowledge: semantic search failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "search failed")
 	}
 
 	return c.JSON(fiber.Map{
@@ -60,7 +62,8 @@ func (h *KnowledgeHandler) SearchMemories(c fiber.Ctx) error {
 
 	memories, err := h.store.SearchMemories(c.Context(), orgID, query, limit)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Memory search failed: "+err.Error())
+		logging.Printf("knowledge: memory search failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "memory search failed")
 	}
 
 	return c.JSON(fiber.Map{
@@ -104,7 +107,8 @@ func (h *KnowledgeHandler) AddNode(c fiber.Ctx) error {
 	}
 
 	if err := h.store.AddNode(c.Context(), node); err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to add node: "+err.Error())
+		logging.Printf("knowledge: add node failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to add node")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(node)
@@ -151,7 +155,8 @@ func (h *KnowledgeHandler) AddEdge(c fiber.Ctx) error {
 	}
 
 	if err := h.store.AddEdge(c.Context(), edge); err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to add edge: "+err.Error())
+		logging.Printf("knowledge: add edge failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to add edge")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(edge)
@@ -171,7 +176,8 @@ func (h *KnowledgeHandler) GetNeighbors(c fiber.Ctx) error {
 
 	nodes, edges, err := h.store.GetNeighbors(c.Context(), nodeID, depth)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get neighbors: "+err.Error())
+		logging.Printf("knowledge: get neighbors failed for node %s: %v", nodeID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get neighbors")
 	}
 
 	return c.JSON(fiber.Map{
@@ -200,7 +206,8 @@ func (h *KnowledgeHandler) StoreMemory(c fiber.Ctx) error {
 
 	entry, err := h.store.StoreMemory(c.Context(), orgID, req.AgentType, req.Content, req.Metadata)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to store memory: "+err.Error())
+		logging.Printf("knowledge: store memory failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to store memory")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(entry)

@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/timeless/backend/internal/email"
+	"github.com/timeless/backend/internal/logging"
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/worker"
 )
@@ -98,7 +99,11 @@ func (h *EmailHandler) SendDirect(c fiber.Ctx) error {
 
 	result, err := h.sender.Send(c.Context(), msg)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to send email: "+err.Error())
+		// Can carry the SMTP/SendGrid provider's raw error, which for an
+		// auth or connection failure may include provider-side detail
+		// that doesn't belong in an API response.
+		logging.Printf("email: send failed for org %s: %v", middleware.GetOrgID(c), err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to send email")
 	}
 
 	return c.JSON(fiber.Map{
@@ -138,7 +143,8 @@ func (h *EmailHandler) SendTemplate(c fiber.Ctx) error {
 
 	result, err := h.sender.SendTemplate(c.Context(), msg, req.TemplateBody, data)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to send email: "+err.Error())
+		logging.Printf("email: send-template failed for org %s: %v", orgID, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to send email")
 	}
 
 	return c.JSON(fiber.Map{
