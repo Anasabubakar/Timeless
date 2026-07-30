@@ -15,6 +15,7 @@ import (
 	"github.com/timeless/backend/internal/ai/provider"
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/email"
+	"github.com/timeless/backend/internal/eventbus"
 	"github.com/timeless/backend/internal/handler"
 	"github.com/timeless/backend/internal/integration"
 	"github.com/timeless/backend/internal/middleware"
@@ -78,9 +79,12 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// Services
 	authSvc := service.NewAuthService(userRepo, orgRepo, sessionRepo, emailVerifyRepo, passwordResetRepo, roleRepo, cfg, rdb, emailSender, db)
+	invitationRepo := repository.NewInvitationRepository(db)
+	invSvc := service.NewInvitationService(invitationRepo, roleRepo, userRepo, orgRepo, authSvc, emailSender, db)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authSvc)
+	invitationHandler := handler.NewInvitationHandler(invSvc)
 
 	// Public routes
 	api := app.Group("/api/v1", middleware.WithAPIVersion)
@@ -90,6 +94,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	auth.Post("/join", authHandler.Join, rl.Limit(middleware.RateLimitJoin()), rl.Limit(middleware.RateLimitJoinByOrg()))
 	auth.Post("/login", authHandler.Login, rl.Limit(middleware.RateLimitLogin()), rl.Limit(middleware.RateLimitLoginByAccount()))
 	auth.Post("/refresh", authHandler.RefreshToken, rl.Limit(middleware.RateLimitRefresh()))
+	api.Post("/invitations/accept", invitationHandler.Accept, rl.Limit(middleware.RateLimitRegister()))
 	auth.Post("/verify-email", authHandler.VerifyEmail, rl.Limit(middleware.RateLimitEmailVerification()))
 	auth.Post("/resend-verification", authHandler.ResendVerification, rl.Limit(middleware.RateLimitEmailVerification()), rl.Limit(middleware.RateLimitEmailVerificationByAccount()))
 	auth.Post("/forgot-password", authHandler.ForgotPassword, rl.Limit(middleware.RateLimitPasswordReset()), rl.Limit(middleware.RateLimitPasswordResetByAccount()))
@@ -105,6 +110,17 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	credentialCipher := security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...)
 	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
 	integrationSvc := service.NewIntegrationService(integrationRepo, syncRunRepo, credentialCipher, workerClient, registryCfg)
+
+	// Event bus: entity services publish here on create/update/delete;
+	// SetPublisher routes every Publish through asynq (same worker queue
+	// as everything else) so an event survives a process restart instead
+	// of only ever firing in-process. Subscribers (Notion push, future
+	// Zapier/Apollo adapters) register with bus.Subscribe from their own
+	// wiring point once those adapters exist.
+	bus := eventbus.NewBus()
+	if workerClient != nil {
+		bus.SetPublisher(worker.NewEventPublisher(workerClient))
+	}
 
 	// OAuth (public: browser redirects can't carry auth headers). This
 	// authenticates the start leg via a JWT query param instead, and the
@@ -169,7 +185,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// Companies
 	companyRepo := repository.NewCompanyRepository(db)
-	companySvc := service.NewCompanyService(companyRepo)
+	companySvc := service.NewCompanyService(companyRepo).SetBus(bus)
 	companyHandler := handler.NewCompanyHandler(companySvc)
 	companies := protected.Group("/companies", middleware.MaxBodySize(256*1024))
 	companies.Get("/", companyHandler.List)
@@ -191,7 +207,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// Sponsors
 	sponsorRepo := repository.NewSponsorRepository(db)
-	sponsorSvc := service.NewSponsorService(sponsorRepo)
+	sponsorSvc := service.NewSponsorService(sponsorRepo).SetBus(bus)
 	sponsorHandler := handler.NewSponsorHandler(sponsorSvc)
 	sponsors := protected.Group("/sponsors", middleware.MaxBodySize(256*1024))
 	sponsors.Get("/", sponsorHandler.List)
@@ -203,7 +219,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// Contacts
 	contactRepo := repository.NewContactRepository(db)
-	contactSvc := service.NewContactService(contactRepo)
+	contactSvc := service.NewContactService(contactRepo).SetBus(bus)
 	contactHandler := handler.NewContactHandler(contactSvc)
 	contacts := protected.Group("/contacts", middleware.MaxBodySize(256*1024))
 	contacts.Get("/", contactHandler.List)
@@ -435,13 +451,15 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	protected.Post("/contacts/batch/delete", batchHandler.BatchDelete("contacts"))
 
 	// Team Management
-	teamHandler := handler.NewTeamHandler(db, roleRepo, rbacMw)
+	teamHandler := handler.NewTeamHandler(db, roleRepo, rbacMw, invSvc)
 	team := protected.Group("/team")
 	team.Get("/members", teamHandler.ListMembers)
 	team.Post("/members", teamHandler.InviteMember)
 	team.Patch("/members/:id/roles", teamHandler.UpdateMemberRole)
 	team.Delete("/members/:id", teamHandler.RemoveMember)
 	team.Get("/roles", teamHandler.ListRoles)
+	team.Get("/invitations", teamHandler.ListPendingInvitations)
+	team.Delete("/invitations/:id", teamHandler.RevokeInvitation)
 
 	// Email endpoints
 	emailHandler := handler.NewEmailHandler(emailSender, workerClient)
@@ -501,6 +519,7 @@ var publicAPIRoutes = map[string]bool{
 	"POST /api/v1/auth/register":                     true,
 	"GET /api/v1/auth/organizations/lookup":          true,
 	"POST /api/v1/auth/join":                         true,
+	"POST /api/v1/invitations/accept":                true,
 	"POST /api/v1/auth/login":                        true,
 	"POST /api/v1/auth/refresh":                      true,
 	"POST /api/v1/auth/verify-email":                 true,

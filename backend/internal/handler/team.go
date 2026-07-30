@@ -2,7 +2,7 @@ package handler
 
 import (
 	"encoding/json"
-	"log"
+	"errors"
 	"slices"
 	"strings"
 
@@ -15,6 +15,7 @@ import (
 	"github.com/timeless/backend/internal/normalize"
 	"github.com/timeless/backend/internal/pkg/reqbind"
 	"github.com/timeless/backend/internal/repository"
+	"github.com/timeless/backend/internal/service"
 )
 
 // ownerRoleName must match the "Owner" system role seeded by
@@ -25,10 +26,11 @@ type TeamHandler struct {
 	db       *gorm.DB
 	roleRepo *repository.RoleRepository
 	rbac     *middleware.RBACMiddleware
+	invSvc   *service.InvitationService
 }
 
-func NewTeamHandler(db *gorm.DB, roleRepo *repository.RoleRepository, rbac *middleware.RBACMiddleware) *TeamHandler {
-	return &TeamHandler{db: db, roleRepo: roleRepo, rbac: rbac}
+func NewTeamHandler(db *gorm.DB, roleRepo *repository.RoleRepository, rbac *middleware.RBACMiddleware, invSvc *service.InvitationService) *TeamHandler {
+	return &TeamHandler{db: db, roleRepo: roleRepo, rbac: rbac, invSvc: invSvc}
 }
 
 // hasRole reports whether user currently holds the named role.
@@ -125,8 +127,12 @@ type InviteMemberInput struct {
 	Role      string `json:"role" validate:"required"`
 }
 
+// InviteMember sends an actual invitation (token + email) rather than
+// creating an account directly — see InvitationService.Create. The
+// invited person doesn't exist as a User until they accept it.
 func (h *TeamHandler) InviteMember(c fiber.Ctx) error {
 	orgID := middleware.GetOrgID(c)
+	actorID := middleware.GetUserID(c)
 
 	var input InviteMemberInput
 	if verr := reqbind.JSON(c, &input); verr != nil {
@@ -144,46 +150,43 @@ func (h *TeamHandler) InviteMember(c fiber.Ctx) error {
 		}
 	}
 
-	var existing models.User
-	if err := h.db.Where("email = ? AND organization_id = ?", input.Email, orgID).First(&existing).Error; err == nil {
-		return fiber.NewError(fiber.StatusConflict, "user already exists in this organization")
+	inv, _, err := h.invSvc.Create(c.Context(), orgID, actorID, input.Email, input.Role, c.IP())
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrAlreadyMember):
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		case errors.Is(err, service.ErrAlreadyInvited):
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		}
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
-	// Resolve the role before creating the user — previously an
-	// unrecognized role name was silently swallowed (the lookup's error
-	// was ignored) and the invite would still succeed with the new user
-	// left holding zero roles/permissions, with nothing in the response
-	// indicating anything had gone wrong.
-	var role models.Role
-	if err := h.db.Where("organization_id = ? AND name = ?", orgID, input.Role).First(&role).Error; err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "unknown role: "+input.Role)
-	}
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"data": inv})
+}
 
-	user := models.User{
-		OrganizationID: orgID,
-		Email:          input.Email,
-		FirstName:      input.FirstName,
-		LastName:       input.LastName,
-		Status:         "invited",
+// ListPendingInvitations: GET /team/invitations
+func (h *TeamHandler) ListPendingInvitations(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	invitations, err := h.invSvc.ListPending(c.Context(), orgID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to list invitations")
 	}
-	user.ID = uuid.New()
+	return c.JSON(fiber.Map{"data": invitations})
+}
 
-	if err := h.db.Create(&user).Error; err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "failed to create user")
-	}
-
-	if err := h.db.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?) ON CONFLICT DO NOTHING", user.ID, role.ID).Error; err != nil {
-		log.Printf("team: failed to assign role %s to invited user %s: %v", role.Name, user.ID, err)
-	}
-
+// RevokeInvitation: DELETE /team/invitations/:id
+func (h *TeamHandler) RevokeInvitation(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
 	actorID := middleware.GetUserID(c)
-	middleware.LogSecurityEvent(h.db, orgID, &actorID, "team", "member_invited",
-		"invited "+input.Email+" as "+input.Role, c.IP(), map[string]string{
-			"invited_user_id": user.ID.String(),
-			"role":            input.Role,
-		})
+	invID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid invitation id")
+	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"data": user})
+	if err := h.invSvc.Revoke(c.Context(), orgID, invID, actorID, c.IP()); err != nil {
+		return fiber.NewError(fiber.StatusNotFound, err.Error())
+	}
+	return c.Status(fiber.StatusNoContent).Send(nil)
 }
 
 type UpdateMemberRoleInput struct {

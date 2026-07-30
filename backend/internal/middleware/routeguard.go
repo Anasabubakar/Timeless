@@ -173,6 +173,8 @@ var routePermissions = map[string]string{
 	"PATCH /api/v1/team/members/:id/roles": PermTeamManage,
 	"DELETE /api/v1/team/members/:id":      PermTeamManage,
 	"GET /api/v1/team/roles":               PermTeamRead,
+	"GET /api/v1/team/invitations":         PermTeamRead,
+	"DELETE /api/v1/team/invitations/:id":  PermTeamManage,
 
 	"POST /api/v1/emails/send":          PermEmailsSend,
 	"POST /api/v1/emails/send-direct":   PermEmailsSend,
