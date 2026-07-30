@@ -193,12 +193,11 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 	// role who (with RBAC enforced on every route) is locked out of the
 	// account they just created.
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		orgRepoTx := repository.NewOrganizationRepository(tx)
 		userRepoTx := repository.NewUserRepository(tx)
 		roleRepoTx := repository.NewRoleRepository(tx)
 
 		var txErr error
-		org, txErr = createOrgWithUniqueSlug(ctx, orgRepoTx, input.OrgName, input.OrgSlug)
+		org, txErr = createOrgWithUniqueSlug(ctx, tx, input.OrgName, input.OrgSlug)
 		if txErr != nil {
 			return txErr
 		}
@@ -253,7 +252,19 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 // and only reacts to an actual unique-constraint violation from Postgres
 // — the one thing that's atomic and authoritative — retrying with a new
 // candidate when that happens, rather than trusting a prior read.
-func createOrgWithUniqueSlug(ctx context.Context, orgRepo *repository.OrganizationRepository, name, requestedSlug string) (*models.Organization, error) {
+//
+// Each attempt is wrapped in its own SAVEPOINT. Postgres aborts the
+// entire enclosing transaction after any failed statement — including an
+// expected unique-violation — and refuses every further command on it
+// ("current transaction is aborted", SQLSTATE 25P02) until a rollback
+// happens. Without a savepoint to roll back to, the retry loop's next
+// INSERT attempt would itself fail with that abort error instead of a
+// clean shot at the next candidate slug, which is exactly what happened
+// under concurrent signups for the same organization name before this
+// was added: the first collision correctly retried, but every retry
+// after it failed with 25P02 and the whole registration 500'd.
+func createOrgWithUniqueSlug(ctx context.Context, tx *gorm.DB, name, requestedSlug string) (*models.Organization, error) {
+	orgRepo := repository.NewOrganizationRepository(tx)
 	base := normalize.Slug(requestedSlug)
 	if base == "" {
 		base = normalize.Slug(name)
@@ -270,6 +281,11 @@ func createOrgWithUniqueSlug(ctx context.Context, orgRepo *repository.Organizati
 				return nil, err
 			}
 			slug = base + "-" + suffix
+		}
+
+		savepoint := fmt.Sprintf("org_slug_attempt_%d", attempt)
+		if err := tx.SavePoint(savepoint).Error; err != nil {
+			return nil, fmt.Errorf("failed to set savepoint: %w", err)
 		}
 
 		org := &models.Organization{Name: name, Slug: slug, Plan: "free"}
@@ -292,8 +308,12 @@ func createOrgWithUniqueSlug(ctx context.Context, orgRepo *repository.Organizati
 		if !repository.IsUniqueViolation(err, "") {
 			return nil, fmt.Errorf("failed to create organization: %w", err)
 		}
-		// Slug taken by a concurrent or prior signup — loop and retry
-		// with a new random suffix.
+		// Slug taken by a concurrent or prior signup — roll back to just
+		// before the failed INSERT (undoing the abort, not the whole
+		// transaction) and retry with a new random suffix.
+		if rbErr := tx.RollbackTo(savepoint).Error; rbErr != nil {
+			return nil, fmt.Errorf("failed to roll back to savepoint: %w", rbErr)
+		}
 	}
 	return nil, errors.New("could not generate a unique organization slug, please try again")
 }
