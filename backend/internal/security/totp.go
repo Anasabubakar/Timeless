@@ -98,7 +98,7 @@ func hotp(key []byte, counter uint64) string {
 // when the user's authenticator device is unavailable. Callers must hash
 // them (HashBackupCode) before persisting.
 func GenerateBackupCodes(n int) ([]string, error) {
-	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // no ambiguous chars (0/O, 1/I/L)
+	const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789" // no ambiguous chars (0/O, 1/I/L)
 	codes := make([]string, n)
 	for i := range codes {
 		var b strings.Builder
