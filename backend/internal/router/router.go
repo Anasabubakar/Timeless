@@ -152,7 +152,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	protected.Patch("/organizations/current", orgHandler.Update)
 
 	// Profile
-	profileHandler := handler.NewProfileHandler(userRepo)
+	profileHandler := handler.NewProfileHandler(userRepo, authSvc)
 	protected.Patch("/profile", profileHandler.Update)
 	protected.Post("/profile/password", profileHandler.ChangePassword)
 

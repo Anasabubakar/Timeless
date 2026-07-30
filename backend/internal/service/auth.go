@@ -558,6 +558,50 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword, ip 
 	return nil
 }
 
+// ChangePassword is the "I know my current password, I want a new one"
+// flow (as opposed to ResetPassword's emailed-token flow for "I forgot
+// it"). Requires the current password as re-authentication, then does
+// the same thing ResetPassword does on success — revoke every other
+// session and send a notification email — for the same reason: a
+// password change is exactly the moment to invalidate whatever session
+// an attacker might already be holding, whether the user is changing
+// it routinely or because they suspect exactly that.
+func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword, ip string) error {
+	if len(newPassword) < 8 {
+		return errors.New("new password must be at least 8 characters")
+	}
+
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return errors.New("user not found")
+	}
+	if user.PasswordHash == nil {
+		return errors.New("no password set for this account")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(currentPassword)); err != nil {
+		return errors.New("current password is incorrect")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	hashStr := string(hash)
+	user.PasswordHash = &hashStr
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	if err := s.sessionRepo.RevokeAllForUser(ctx, user.ID); err != nil {
+		log.Printf("auth: failed to revoke sessions for user %s after password change: %v", user.ID, err)
+	}
+
+	s.auditAuth(user.OrganizationID, &user.ID, "password_changed", "password changed", ip, nil)
+	s.sendAuthEmail(ctx, email.PasswordChangedEmail(user.Email, s.cfg.SMTPFrom, s.cfg.SMTPFromName))
+	return nil
+}
+
 // DisableMFA requires the current password as re-authentication before
 // turning MFA off — otherwise a hijacked, already-authenticated session
 // alone would be enough to strip account protection.
