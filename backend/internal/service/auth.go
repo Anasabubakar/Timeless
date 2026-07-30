@@ -286,6 +286,17 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput, meta Se
 		return nil, nil, err
 	}
 
+	// Re-fetch with Roles preloaded — Create() doesn't populate the
+	// many2many association back onto the struct, and the role was
+	// assigned via a separate raw INSERT after it, so the in-memory
+	// `user` from the transaction above has an empty Roles slice. The
+	// frontend's "you are Owner" badge (and anything else reading
+	// user.roles straight off the register response) needs this filled
+	// in, not just derivable later from a separate /auth/me call.
+	if refreshed, refreshErr := s.userRepo.FindByID(ctx, user.ID); refreshErr == nil {
+		user = refreshed
+	}
+
 	s.issueEmailVerification(ctx, user)
 
 	tokens, err := s.generateTokens(ctx, user, meta)
@@ -360,6 +371,10 @@ func (s *AuthService) JoinOrganization(ctx context.Context, input JoinInput, met
 	})
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if refreshed, refreshErr := s.userRepo.FindByID(ctx, user.ID); refreshErr == nil {
+		user = refreshed
 	}
 
 	s.issueEmailVerification(ctx, user)

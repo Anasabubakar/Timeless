@@ -218,6 +218,10 @@ func (s *InvitationService) Accept(ctx context.Context, input AcceptInput, meta 
 		fmt.Printf("invitation: failed to mark %s accepted: %v\n", inv.ID, err)
 	}
 
+	if refreshed, refreshErr := s.userRepo.FindByID(ctx, user.ID); refreshErr == nil {
+		user = refreshed
+	}
+
 	s.audit(inv.OrganizationID, &user.ID, "invitation_accepted", user.Email+" accepted their invitation", meta.IP, map[string]string{
 		"invitation_id": inv.ID.String(),
 	})
