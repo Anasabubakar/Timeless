@@ -52,6 +52,56 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 	})
 }
 
+// LookupOrganization: GET /auth/organizations/lookup?name=... — public,
+// used by the signup form to decide whether to render "create a new
+// organization" (prompting for a new org password) or "join this
+// organization" (prompting for its existing password) before any account
+// is created.
+func (h *AuthHandler) LookupOrganization(c fiber.Ctx) error {
+	name := c.Query("name")
+	if name == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "name is required")
+	}
+
+	result, err := h.svc.LookupOrganization(c.Context(), name)
+	if err != nil {
+		log.Printf("auth: organization lookup failed for %q: %v", name, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "lookup failed")
+	}
+
+	return c.JSON(result)
+}
+
+// Join: POST /auth/join — CASE 2 of signup, joining an organization that
+// already exists by proving knowledge of its shared password.
+func (h *AuthHandler) Join(c fiber.Ctx) error {
+	var input service.JoinInput
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
+	}
+
+	user, tokens, err := h.svc.JoinOrganization(c.Context(), input, sessionMeta(c, false))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrOrgPasswordLocked):
+			return fiber.NewError(fiber.StatusTooManyRequests, err.Error())
+		case err.Error() == "email already registered":
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		case err.Error() == "organization not found":
+			return fiber.NewError(fiber.StatusNotFound, err.Error())
+		case err.Error() == "incorrect organization password":
+			return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+		}
+		log.Printf("auth: join failed for %s: %v", input.Email, err)
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to join organization")
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"user":   user,
+		"tokens": tokens,
+	})
+}
+
 func (h *AuthHandler) Login(c fiber.Ctx) error {
 	var input service.LoginInput
 	if verr := reqbind.JSON(c, &input); verr != nil {

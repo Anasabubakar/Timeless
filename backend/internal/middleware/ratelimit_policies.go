@@ -54,6 +54,42 @@ func RateLimitRegister() RateLimitConfig {
 	return RateLimitConfig{Name: "register", Limit: 5, Window: time.Hour, KeyFunc: ByIP}
 }
 
+// RateLimitOrgLookup covers the public "does this organization exist"
+// check the signup form calls on every keystroke-settled org name. Loose
+// (this leaks only existence + display name/slug, already by design —
+// see OrgLookupResult) but still bounded so it can't be used to
+// enumerate the whole organization namespace at will.
+func RateLimitOrgLookup() RateLimitConfig {
+	return RateLimitConfig{Name: "org_lookup", Limit: 30, Window: 5 * time.Minute, Burst: 10, BurstWindow: 10 * time.Second, KeyFunc: ByIP}
+}
+
+// RateLimitJoin throttles POST /auth/join per IP — same shape as
+// RateLimitLogin, since guessing an organization's shared password is
+// exactly a credential-guessing attack, just against a shared secret
+// instead of a personal one.
+func RateLimitJoin() RateLimitConfig {
+	return RateLimitConfig{Name: "join", Limit: 20, Window: 5 * time.Minute, Burst: 6, BurstWindow: 10 * time.Second, KeyFunc: ByIP}
+}
+
+// RateLimitJoinByOrg catches distributed guessing of one organization's
+// password across many IPs — RateLimitJoin's IP limit alone can't see
+// that. Looser than AuthService's own org-password lockout (which
+// already locks the org after a handful of failures); this exists so an
+// attacker spreading attempts across IPs to dodge RateLimitJoin still
+// hits a ceiling tied to the organization they're actually after.
+func RateLimitJoinByOrg() RateLimitConfig {
+	return RateLimitConfig{Name: "join_org", Limit: 15, Window: 15 * time.Minute, KeyFunc: ByBodyOrgSlug}
+}
+
+// RateLimitOrgSettings throttles organization settings changes that
+// require re-entering the org password (rename, slug change, password
+// rotation, ownership transfer) — same reasoning and shape as
+// RateLimitMFAManage: an authenticated session is not sufficient reason
+// to allow unlimited password-guessing against the org's own secret.
+func RateLimitOrgSettings() RateLimitConfig {
+	return RateLimitConfig{Name: "org_settings", Limit: 10, Window: 5 * time.Minute, KeyFunc: ByOrg}
+}
+
 func RateLimitRefresh() RateLimitConfig {
 	return RateLimitConfig{Name: "refresh", Limit: 60, Window: 5 * time.Minute, Burst: 15, BurstWindow: 10 * time.Second, KeyFunc: ByIP}
 }

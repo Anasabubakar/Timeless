@@ -169,3 +169,18 @@ func ByBodyEmail(c fiber.Ctx) string {
 	}
 	return "ip:" + c.IP()
 }
+
+// ByBodyOrgSlug limits per the "org_slug" field in the JSON request body
+// — for POST /auth/join, so an attacker distributing organization-
+// password guesses across many IPs still hits a ceiling tied to the one
+// organization they're actually targeting, the same reasoning as
+// ByBodyEmail for account-targeted attacks.
+func ByBodyOrgSlug(c fiber.Ctx) string {
+	var body struct {
+		OrgSlug string `json:"org_slug"`
+	}
+	if err := json.Unmarshal(c.Body(), &body); err == nil && body.OrgSlug != "" {
+		return "org_slug:" + strings.ToLower(strings.TrimSpace(body.OrgSlug))
+	}
+	return "ip:" + c.IP()
+}

@@ -86,6 +86,8 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	api := app.Group("/api/v1", middleware.WithAPIVersion)
 	auth := api.Group("/auth", middleware.MaxBodySize(16*1024))
 	auth.Post("/register", authHandler.Register, rl.Limit(middleware.RateLimitRegister()))
+	auth.Get("/organizations/lookup", authHandler.LookupOrganization, rl.Limit(middleware.RateLimitOrgLookup()))
+	auth.Post("/join", authHandler.Join, rl.Limit(middleware.RateLimitJoin()), rl.Limit(middleware.RateLimitJoinByOrg()))
 	auth.Post("/login", authHandler.Login, rl.Limit(middleware.RateLimitLogin()), rl.Limit(middleware.RateLimitLoginByAccount()))
 	auth.Post("/refresh", authHandler.RefreshToken, rl.Limit(middleware.RateLimitRefresh()))
 	auth.Post("/verify-email", authHandler.VerifyEmail, rl.Limit(middleware.RateLimitEmailVerification()))
@@ -496,6 +498,8 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 // verified by HMAC signature instead of a session).
 var publicAPIRoutes = map[string]bool{
 	"POST /api/v1/auth/register":                     true,
+	"GET /api/v1/auth/organizations/lookup":          true,
+	"POST /api/v1/auth/join":                         true,
 	"POST /api/v1/auth/login":                        true,
 	"POST /api/v1/auth/refresh":                      true,
 	"POST /api/v1/auth/verify-email":                 true,
