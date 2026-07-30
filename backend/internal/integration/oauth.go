@@ -2,6 +2,8 @@ package integration
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -26,6 +28,18 @@ type OAuthProvider struct {
 	// BasicAuth: send client credentials via HTTP Basic (Notion style)
 	// instead of in the form body.
 	BasicAuth bool
+	// PKCE opts this provider into RFC 7636 (Proof Key for Code Exchange)
+	// on top of the state parameter. state alone stops CSRF (a
+	// third party can't trick a victim into completing our flow with
+	// the attacker's code); PKCE additionally stops authorization-code
+	// interception (if the code itself leaks — a referrer header, a
+	// shared proxy log, a browser history sync — it's useless without
+	// the verifier that never left this server). Off by default: as of
+	// this writing, neither Notion's nor Apollo's OAuth documentation
+	// mentions PKCE support, so sending an unrecognized code_challenge
+	// would do nothing there. This exists so a future provider that
+	// does support it (Google, for one) is a one-line opt-in.
+	PKCE bool
 	// CredentialKey is the key the exchanged access token is stored under in
 	// Integration.Credentials, matching what each Client's Validate/Sync expects.
 	CredentialKey string
@@ -39,8 +53,32 @@ func (p *OAuthProvider) Configured() bool {
 	return p.ClientID != "" && p.ClientSecret != ""
 }
 
+// GeneratePKCEVerifier returns a random RFC 7636 code_verifier (43-128
+// characters from the unreserved URL-safe alphabet; base64url of 32
+// random bytes lands at 43). Callers store this server-side (keyed with
+// the same state value) and pass it back to Exchange — it must never
+// appear in a redirect URL or anywhere the browser sees it, which is
+// the entire point.
+func GeneratePKCEVerifier() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+// pkceChallengeS256 derives the code_challenge sent on the authorize
+// request from a verifier, using the S256 method (the only method
+// RFC 7636 requires servers to support; "plain" is a fallback for
+// clients that can't compute SHA-256, which doesn't apply here).
+func pkceChallengeS256(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
 // AuthorizeRedirect builds the provider authorization URL for this flow.
-func (p *OAuthProvider) AuthorizeRedirect(redirectURI, state string) string {
+// codeVerifier is ignored unless p.PKCE is set.
+func (p *OAuthProvider) AuthorizeRedirect(redirectURI, state, codeVerifier string) string {
 	q := url.Values{}
 	q.Set("client_id", p.ClientID)
 	q.Set("redirect_uri", redirectURI)
@@ -52,6 +90,10 @@ func (p *OAuthProvider) AuthorizeRedirect(redirectURI, state string) string {
 	if p.Provider == "notion" {
 		q.Set("owner", "user")
 	}
+	if p.PKCE && codeVerifier != "" {
+		q.Set("code_challenge", pkceChallengeS256(codeVerifier))
+		q.Set("code_challenge_method", "S256")
+	}
 	sep := "?"
 	if strings.Contains(p.AuthorizeURL, "?") {
 		sep = "&"
@@ -60,13 +102,18 @@ func (p *OAuthProvider) AuthorizeRedirect(redirectURI, state string) string {
 }
 
 // Exchange swaps an authorization code for an access token and returns the
-// credentials map to store on the Integration record.
-func (p *OAuthProvider) Exchange(ctx context.Context, code, redirectURI string) (map[string]string, error) {
-	return p.token(ctx, map[string]string{
+// credentials map to store on the Integration record. codeVerifier is
+// ignored unless p.PKCE is set.
+func (p *OAuthProvider) Exchange(ctx context.Context, code, redirectURI, codeVerifier string) (map[string]string, error) {
+	params := map[string]string{
 		"grant_type":   "authorization_code",
 		"code":         code,
 		"redirect_uri": redirectURI,
-	})
+	}
+	if p.PKCE && codeVerifier != "" {
+		params["code_verifier"] = codeVerifier
+	}
+	return p.token(ctx, params)
 }
 
 // Refresh swaps a still-valid refresh token for a new access token. Per

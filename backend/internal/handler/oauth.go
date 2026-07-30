@@ -68,6 +68,9 @@ type oauthState struct {
 	OrgID    string `json:"org_id"`
 	UserID   string `json:"user_id"`
 	Provider string `json:"provider"`
+	// CodeVerifier is only set (and only meaningful) for providers with
+	// PKCE enabled — see OAuthProvider.PKCE.
+	CodeVerifier string `json:"code_verifier,omitempty"`
 }
 
 func (h *OAuthHandler) redirectURI() string {
@@ -107,12 +110,20 @@ func (h *OAuthHandler) Start(c fiber.Ctx) error {
 	}
 
 	state := uuid.NewString()
-	payload, _ := json.Marshal(oauthState{OrgID: orgID, UserID: userID, Provider: providerName})
+	var codeVerifier string
+	if provider.PKCE {
+		codeVerifier, err = integration.GeneratePKCEVerifier()
+		if err != nil {
+			return h.frontendRedirect(c, url.Values{"error": {"could not start oauth flow"}})
+		}
+	}
+
+	payload, _ := json.Marshal(oauthState{OrgID: orgID, UserID: userID, Provider: providerName, CodeVerifier: codeVerifier})
 	if err := h.rdb.Set(c.Context(), "oauth_state:"+state, payload, 10*time.Minute).Err(); err != nil {
 		return h.frontendRedirect(c, url.Values{"error": {"could not start oauth flow"}})
 	}
 
-	return c.Redirect().Status(fiber.StatusFound).To(provider.AuthorizeRedirect(h.redirectURI(), state))
+	return c.Redirect().Status(fiber.StatusFound).To(provider.AuthorizeRedirect(h.redirectURI(), state, codeVerifier))
 }
 
 // Callback: GET /integrations/oauth/callback?code=...&state=...
@@ -136,7 +147,7 @@ func (h *OAuthHandler) Callback(c fiber.Ctx) error {
 		return h.frontendRedirect(c, url.Values{"error": {"unsupported provider"}})
 	}
 
-	credentials, err := provider.Exchange(c.Context(), c.Query("code"), h.redirectURI())
+	credentials, err := provider.Exchange(c.Context(), c.Query("code"), h.redirectURI(), state.CodeVerifier)
 	if err != nil {
 		// The provider's token-exchange error can carry internal
 		// details (request/response fragments) that don't belong in a
