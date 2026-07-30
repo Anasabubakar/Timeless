@@ -7,7 +7,6 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"github.com/timeless/backend/internal/models"
@@ -109,29 +108,11 @@ func satisfiesAny(userPerms, required []string) bool {
 // request that's already being rejected; the denial itself was already
 // decided by the time this runs.
 func (m *RBACMiddleware) logDenial(c fiber.Ctx, userID, orgID uuid.UUID, requiredPermission string) {
-	if m.db == nil {
-		return
-	}
-	meta := map[string]string{
+	LogSecurityEvent(m.db, orgID, &userID, "authorization", "permission_denied", "denied: "+requiredPermission, c.IP(), map[string]string{
 		"method":              c.Method(),
 		"path":                c.Path(),
 		"required_permission": requiredPermission,
-	}
-	metaJSON, _ := json.Marshal(meta)
-	ip := c.IP()
-
-	activity := models.Activity{
-		OrganizationID: orgID,
-		UserID:         &userID,
-		EntityType:     "authorization",
-		Type:           "permission_denied",
-		Subject:        "denied: " + requiredPermission,
-		IPAddress:      &ip,
-		Metadata:       datatypes.JSON(metaJSON),
-	}
-	activity.ID = uuid.New()
-
-	go m.db.Create(&activity)
+	})
 }
 
 // HasPermission is the non-middleware entry point into the same

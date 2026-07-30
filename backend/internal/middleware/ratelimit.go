@@ -11,10 +11,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
-
-	"github.com/timeless/backend/internal/models"
 )
 
 // RateLimitConfig describes one named limiter: a sustained ceiling over
@@ -111,35 +108,20 @@ func (rl *RedisRateLimiter) deny(c fiber.Ctx, name, key string, retryAfter time.
 // more than it should have been allowed to" events an admin needs
 // visibility into.
 func (rl *RedisRateLimiter) logViolation(c fiber.Ctx, limiterName, key string) {
-	if rl.db == nil {
-		return
-	}
 	orgID := GetOrgID(c)
 	userID := GetUserID(c)
 
-	meta := map[string]string{
+	var userIDPtr *uuid.UUID
+	if userID != uuid.Nil {
+		userIDPtr = &userID
+	}
+
+	LogSecurityEvent(rl.db, orgID, userIDPtr, "rate_limit", "rate_limit_violation", "rate limited: "+limiterName, c.IP(), map[string]string{
 		"limiter": limiterName,
 		"key":     key,
 		"method":  c.Method(),
 		"path":    c.Path(),
-	}
-	metaJSON, _ := json.Marshal(meta)
-	ip := c.IP()
-
-	activity := models.Activity{
-		OrganizationID: orgID,
-		EntityType:     "rate_limit",
-		Type:           "rate_limit_violation",
-		Subject:        "rate limited: " + limiterName,
-		IPAddress:      &ip,
-		Metadata:       datatypes.JSON(metaJSON),
-	}
-	activity.ID = uuid.New()
-	if userID != uuid.Nil {
-		activity.UserID = &userID
-	}
-
-	go rl.db.Create(&activity)
+	})
 }
 
 // Key derivation helpers, composed into RateLimitConfig.KeyFunc.
