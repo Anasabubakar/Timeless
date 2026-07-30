@@ -2,14 +2,15 @@ package handler
 
 import (
 	"errors"
-	"github.com/timeless/backend/internal/logging"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
 	"github.com/timeless/backend/internal/integration"
+	"github.com/timeless/backend/internal/logging"
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/pkg/reqbind"
 	"github.com/timeless/backend/internal/service"
 )
 
@@ -89,16 +90,24 @@ func (h *IntegrationHandler) Connect(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	provider := c.Params("provider")
 
-	var input service.ConnectInput
-	if err := c.Bind().JSON(&input); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	var input connectInput
+	if verr := reqbind.JSON(c, &input); verr != nil {
+		return verr
 	}
 
-	rec, err := h.svc.Connect(c.Context(), orgID, userID, provider, input)
+	rec, err := h.svc.Connect(c.Context(), orgID, userID, provider, service.ConnectInput{Credentials: input.Credentials})
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		// client.Validate's error can carry the provider's raw HTTP
+		// response body (e.g. a rejected-credential response) — log it
+		// server-side, don't relay it into the API response.
+		logging.Printf("integration: connect failed for org %s provider %s: %v", orgID, provider, err)
+		return fiber.NewError(fiber.StatusBadRequest, "could not connect "+provider+" — check the credentials and try again")
 	}
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"data": rec})
+}
+
+type connectInput struct {
+	Credentials map[string]string `json:"credentials" validate:"required,min=1"`
 }
 
 func (h *IntegrationHandler) Delete(c fiber.Ctx) error {
