@@ -28,7 +28,15 @@ func AuditLog(cfg AuditConfig) fiber.Handler {
 			return err
 		}
 
-		if status >= 400 {
+		// 401/403/429 already get their own more specific security event
+		// (auth failure never reaches this middleware at all; RBAC denial
+		// and rate-limit violations log themselves via LogSecurityEvent) —
+		// logging them again here would just be a noisier duplicate. A 5xx
+		// on a mutating request is different: nothing else records that a
+		// write was *attempted* and failed unexpectedly, which is exactly
+		// the kind of thing "data deletion"/"admin actions" audit coverage
+		// is supposed to catch, not just successful ones.
+		if status >= 400 && status < 500 {
 			return err
 		}
 
@@ -40,6 +48,9 @@ func AuditLog(cfg AuditConfig) fiber.Handler {
 
 		path := c.Path()
 		action := mapAction(method)
+		if status >= 500 {
+			action = "failed_" + action
+		}
 		entityType, entityID := parseEntity(path)
 
 		if entityType == "" {
