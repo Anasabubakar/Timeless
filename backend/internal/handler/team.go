@@ -12,6 +12,7 @@ import (
 
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
+	"github.com/timeless/backend/internal/normalize"
 	"github.com/timeless/backend/internal/pkg/reqbind"
 	"github.com/timeless/backend/internal/repository"
 )
@@ -131,6 +132,7 @@ func (h *TeamHandler) InviteMember(c fiber.Ctx) error {
 	if verr := reqbind.JSON(c, &input); verr != nil {
 		return verr
 	}
+	input.Email = normalize.Email(input.Email)
 
 	if input.Role == ownerRoleName {
 		isOwner, err := h.requesterIsOwner(c, orgID)
