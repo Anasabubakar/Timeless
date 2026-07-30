@@ -131,7 +131,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 
 	// Notion webhooks (public: Notion calls this directly, verified via
 	// HMAC signature rather than our JWT auth)
-	notionWebhookHandler := handler.NewNotionWebhookHandler(rdb, integrationSvc)
+	notionWebhookHandler := handler.NewNotionWebhookHandler(rdb, integrationSvc, bus)
 	api.Post("/integrations/notion/webhook", notionWebhookHandler.Receive, rl.Limit(middleware.RateLimitWebhookInbound()))
 
 	// Protected routes
