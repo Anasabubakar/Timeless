@@ -32,6 +32,19 @@ func (r *CompanyRepository) FindByID(ctx context.Context, orgID, id uuid.UUID) (
 	return &company, nil
 }
 
+// FindByName is the dedup lookup for anything ingesting companies from an
+// external source with only a name to go on (no domain) — a
+// case-insensitive exact match, not the fuzzy ILIKE substring search List
+// uses for the UI's search box.
+func (r *CompanyRepository) FindByName(ctx context.Context, orgID uuid.UUID, name string) (*models.Company, error) {
+	var company models.Company
+	err := r.db.WithContext(ctx).Where("organization_id = ? AND LOWER(name) = LOWER(?)", orgID, name).First(&company).Error
+	if err != nil {
+		return nil, err
+	}
+	return &company, nil
+}
+
 func (r *CompanyRepository) List(ctx context.Context, orgID uuid.UUID, limit, offset int, search string) ([]models.Company, int64, error) {
 	var companies []models.Company
 	var total int64

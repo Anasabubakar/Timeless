@@ -40,6 +40,19 @@ func (r *ContactRepository) GetByID(ctx context.Context, orgID, id uuid.UUID) (*
 	return &contact, nil
 }
 
+// FindByEmail is the dedup lookup for anything ingesting contacts from an
+// external source by email (Zapier webhooks, provider syncs) — a normalized
+// email is expected to already be case-folded by the caller (see
+// internal/normalize.Email), so this does a plain equality match.
+func (r *ContactRepository) FindByEmail(ctx context.Context, orgID uuid.UUID, email string) (*models.Contact, error) {
+	var contact models.Contact
+	err := r.db.WithContext(ctx).Where("organization_id = ? AND email = ?", orgID, email).First(&contact).Error
+	if err != nil {
+		return nil, err
+	}
+	return &contact, nil
+}
+
 func (r *ContactRepository) Create(ctx context.Context, contact *models.Contact) error {
 	return r.db.WithContext(ctx).Create(contact).Error
 }

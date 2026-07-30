@@ -16,6 +16,7 @@ import (
 	"github.com/timeless/backend/internal/mapping"
 	"github.com/timeless/backend/internal/repository"
 	"github.com/timeless/backend/internal/security"
+	"github.com/timeless/backend/internal/service"
 	"github.com/timeless/backend/internal/syncengine"
 	"github.com/timeless/backend/internal/worker"
 )
@@ -100,6 +101,18 @@ func main() {
 	// the conflict queue instead of guessing a winner.
 	pullSvc := syncengine.NewPullService(db, cipher, fieldMappingRepo, integrationRepo, syncedEntityRepo, syncHistoryRepo, adapters)
 	bus.Subscribe(eventbus.NotionChanged, pullSvc.HandleEvent)
+
+	// Zapier inbound: the webhook receiver (handler.ZapierWebhookHandler)
+	// publishes the raw payload as ZapierWebhookReceived; ZapierIngestService
+	// turns a recognized "new contact/lead" shape into a real Contact —
+	// created through ContactService (not the repo directly) so it
+	// publishes ContactCreated the same as any other creation path, which
+	// is what lets PushService sync it out to Notion automatically.
+	contactRepo := repository.NewContactRepository(db)
+	companyRepo := repository.NewCompanyRepository(db)
+	contactSvc := service.NewContactService(contactRepo).SetBus(bus)
+	zapierIngestSvc := syncengine.NewZapierIngestService(contactRepo, companyRepo, contactSvc)
+	bus.Subscribe(eventbus.ZapierWebhookReceived, zapierIngestSvc.HandleEvent)
 
 	mux := asynq.NewServeMux()
 	handlers := worker.NewHandlers(logger, db, cipher, syncRunRepo, registryCfg, bus)

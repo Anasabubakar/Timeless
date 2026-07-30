@@ -53,6 +53,19 @@ func (r *IntegrationRepository) GetByExternalAccountID(ctx context.Context, prov
 	return &integration, nil
 }
 
+// GetByWebhookSecret finds the integration an inbound webhook request
+// belongs to by its unguessable URL token — used for providers (Zapier)
+// that have no signing mechanism of their own, where the token in the URL
+// path is itself the authentication.
+func (r *IntegrationRepository) GetByWebhookSecret(ctx context.Context, provider, secret string) (*models.Integration, error) {
+	var integration models.Integration
+	err := r.db.WithContext(ctx).Where("provider = ? AND webhook_secret = ?", provider, secret).First(&integration).Error
+	if err != nil {
+		return nil, err
+	}
+	return &integration, nil
+}
+
 func (r *IntegrationRepository) Create(ctx context.Context, integration *models.Integration) error {
 	return r.db.WithContext(ctx).Create(integration).Error
 }

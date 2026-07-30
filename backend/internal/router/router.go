@@ -109,7 +109,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	syncRunRepo := repository.NewSyncRunRepository(db)
 	credentialCipher := security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...)
 	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
-	integrationSvc := service.NewIntegrationService(integrationRepo, syncRunRepo, credentialCipher, workerClient, registryCfg)
+	integrationSvc := service.NewIntegrationService(integrationRepo, syncRunRepo, credentialCipher, workerClient, registryCfg, cfg.APIPublicURL)
 
 	// Event bus: entity services publish here on create/update/delete;
 	// SetPublisher routes every Publish through asynq (same worker queue
@@ -133,6 +133,11 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	// HMAC signature rather than our JWT auth)
 	notionWebhookHandler := handler.NewNotionWebhookHandler(rdb, integrationSvc, bus)
 	api.Post("/integrations/notion/webhook", notionWebhookHandler.Receive, rl.Limit(middleware.RateLimitWebhookInbound()))
+
+	// Zapier inbound webhooks (public: the per-org :token in the path is
+	// the entire authentication — see ZapierWebhookHandler).
+	zapierWebhookHandler := handler.NewZapierWebhookHandler(rdb, integrationSvc, bus)
+	api.Post("/webhooks/zapier/:token", zapierWebhookHandler.Receive, rl.Limit(middleware.RateLimitWebhookInbound()))
 
 	// Protected routes
 	//
@@ -321,6 +326,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	integrations.Post("/:id/revoke", integrationHandler.Revoke)
 	integrations.Post("/:id/sync", integrationHandler.TriggerSync, idempotent)
 	integrations.Post("/:provider/connect", integrationHandler.Connect)
+	integrations.Post("/:provider/webhook-token", integrationHandler.EnableInboundWebhook)
 	integrations.Patch("/notion/pages/:pageID", integrationHandler.PushNotionPage)
 	integrations.Post("/rotate-credentials", integrationHandler.RotateCredentials)
 

@@ -19,8 +19,13 @@ type Integration struct {
 	LastSyncAt     *time.Time     `json:"last_sync_at,omitempty"`
 	LastError      *string        `gorm:"type:text" json:"last_error,omitempty"`
 	WebhookURL     *string        `gorm:"type:text" json:"webhook_url,omitempty"`
-	WebhookSecret  *string        `gorm:"type:text" json:"-"`
-	InstalledBy    *uuid.UUID     `gorm:"type:uuid" json:"installed_by,omitempty"`
+	// WebhookSecret doubles as the unguessable per-org URL token for
+	// inbound webhook receivers that can't authenticate any other way
+	// (Zapier's inbound "Webhooks by Zapier" trigger has no signing
+	// mechanism) — indexed since ZapierWebhookHandler.Receive looks an
+	// Integration up BY this value on every inbound request.
+	WebhookSecret *string    `gorm:"type:text;index" json:"-"`
+	InstalledBy   *uuid.UUID `gorm:"type:uuid" json:"installed_by,omitempty"`
 	// ExternalAccountID is the provider's own account/workspace id (e.g.
 	// Notion's workspace_id). It's not a secret, so it's stored in the
 	// clear (unlike Credentials) specifically so inbound webhook events —

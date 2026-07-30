@@ -123,6 +123,22 @@ func (h *IntegrationHandler) Delete(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+// EnableInboundWebhook returns the org's inbound webhook URL for a
+// provider that has no OAuth/signing flow of its own (Zapier), generating
+// an unguessable token on first call. The URL itself is the secret, so
+// callers should treat this response like a credential — it's never
+// re-derivable from the dashboard's normal integration listing.
+func (h *IntegrationHandler) EnableInboundWebhook(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	provider := c.Params("provider")
+
+	rec, err := h.svc.EnsureInboundWebhookToken(c.Context(), orgID, provider)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	return c.JSON(fiber.Map{"webhook_url": rec.WebhookURL})
+}
+
 // TriggerSync manually enqueues a sync for this integration right now,
 // instead of waiting for the next webhook/scheduled poll.
 func (h *IntegrationHandler) TriggerSync(c fiber.Ctx) error {

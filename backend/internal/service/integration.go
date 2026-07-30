@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,20 +21,22 @@ import (
 )
 
 type IntegrationService struct {
-	repo        *repository.IntegrationRepository
-	syncRunRepo *repository.SyncRunRepository
-	clients     map[string]integration.Client
-	cipher      *security.CredentialCipher
-	worker      *worker.Client
+	repo          *repository.IntegrationRepository
+	syncRunRepo   *repository.SyncRunRepository
+	clients       map[string]integration.Client
+	cipher        *security.CredentialCipher
+	worker        *worker.Client
+	publicBaseURL string
 }
 
-func NewIntegrationService(repo *repository.IntegrationRepository, syncRunRepo *repository.SyncRunRepository, cipher *security.CredentialCipher, workerClient *worker.Client, registryCfg integration.RegistryConfig) *IntegrationService {
+func NewIntegrationService(repo *repository.IntegrationRepository, syncRunRepo *repository.SyncRunRepository, cipher *security.CredentialCipher, workerClient *worker.Client, registryCfg integration.RegistryConfig, publicBaseURL string) *IntegrationService {
 	return &IntegrationService{
-		repo:        repo,
-		syncRunRepo: syncRunRepo,
-		clients:     integration.Registry(registryCfg),
-		cipher:      cipher,
-		worker:      workerClient,
+		repo:          repo,
+		syncRunRepo:   syncRunRepo,
+		clients:       integration.Registry(registryCfg),
+		cipher:        cipher,
+		worker:        workerClient,
+		publicBaseURL: strings.TrimRight(publicBaseURL, "/"),
 	}
 }
 
@@ -271,6 +276,62 @@ func (s *IntegrationService) EnqueueWebhookSync(ctx context.Context, provider, e
 		Data:       map[string]interface{}{"trigger": "webhook"},
 	})
 	return rec.OrganizationID, rec.ID, err
+}
+
+// EnsureInboundWebhookToken returns the org's inbound webhook URL for
+// provider, generating an unguessable token on first call and persisting
+// it (idempotent after that — calling this again just returns the same
+// URL). This is the auth mechanism for providers with no signing scheme
+// of their own (Zapier's inbound "Webhooks by Zapier" trigger): the URL
+// path segment IS the secret, so it must never be logged or exposed
+// outside the authenticated dashboard call that returns it.
+func (s *IntegrationService) EnsureInboundWebhookToken(ctx context.Context, orgID uuid.UUID, provider string) (*models.Integration, error) {
+	rec, err := s.repo.GetByProvider(ctx, orgID, provider)
+	if err != nil {
+		return nil, fmt.Errorf("no %s integration connected for this organization", provider)
+	}
+	if rec.WebhookSecret != nil && *rec.WebhookSecret != "" {
+		return rec, nil
+	}
+
+	token, err := generateWebhookToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate webhook token: %w", err)
+	}
+	url := fmt.Sprintf("%s/api/v1/webhooks/%s/%s", s.publicBaseURL, provider, token)
+	rec.WebhookSecret = &token
+	rec.WebhookURL = &url
+	if err := s.repo.Update(ctx, rec); err != nil {
+		return nil, err
+	}
+	return rec, nil
+}
+
+// IntegrationByWebhookToken resolves an inbound webhook request's org by
+// its unguessable URL token — the sole authentication for providers with
+// no signing mechanism of their own (see EnsureInboundWebhookToken). Only
+// an active integration's token is honored, so revoking/disconnecting
+// immediately stops inbound delivery from being accepted.
+func (s *IntegrationService) IntegrationByWebhookToken(ctx context.Context, provider, token string) (*models.Integration, error) {
+	if token == "" {
+		return nil, fmt.Errorf("empty webhook token")
+	}
+	rec, err := s.repo.GetByWebhookSecret(ctx, provider, token)
+	if err != nil {
+		return nil, err
+	}
+	if rec.Status != "active" {
+		return nil, fmt.Errorf("integration is not active")
+	}
+	return rec, nil
+}
+
+func generateWebhookToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // PushToNotionPage writes SponsorOS-side changes back to a Notion page,
