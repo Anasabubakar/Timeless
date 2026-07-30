@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"slices"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -173,6 +174,13 @@ func (h *TeamHandler) InviteMember(c fiber.Ctx) error {
 		log.Printf("team: failed to assign role %s to invited user %s: %v", role.Name, user.ID, err)
 	}
 
+	actorID := middleware.GetUserID(c)
+	middleware.LogSecurityEvent(h.db, orgID, &actorID, "team", "member_invited",
+		"invited "+input.Email+" as "+input.Role, c.IP(), map[string]string{
+			"invited_user_id": user.ID.String(),
+			"role":            input.Role,
+		})
+
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"data": user})
 }
 
@@ -218,6 +226,11 @@ func (h *TeamHandler) UpdateMemberRole(c fiber.Ctx) error {
 		}
 	}
 
+	previousRoles := make([]string, 0, len(user.Roles))
+	for _, r := range user.Roles {
+		previousRoles = append(previousRoles, r.Name)
+	}
+
 	h.db.Exec("DELETE FROM user_roles WHERE user_id = ?", memberID)
 
 	for _, roleName := range input.Roles {
@@ -226,6 +239,14 @@ func (h *TeamHandler) UpdateMemberRole(c fiber.Ctx) error {
 			h.db.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", memberID, role.ID)
 		}
 	}
+
+	actorID := middleware.GetUserID(c)
+	middleware.LogSecurityEvent(h.db, orgID, &actorID, "team", "role_changed",
+		"changed roles for "+user.Email, c.IP(), map[string]string{
+			"target_user_id": memberID.String(),
+			"previous_roles": strings.Join(previousRoles, ","),
+			"new_roles":      strings.Join(input.Roles, ","),
+		})
 
 	return c.JSON(fiber.Map{"message": "roles updated"})
 }
@@ -262,6 +283,11 @@ func (h *TeamHandler) RemoveMember(c fiber.Ctx) error {
 	if result.RowsAffected == 0 {
 		return fiber.NewError(fiber.StatusNotFound, "member not found")
 	}
+
+	middleware.LogSecurityEvent(h.db, orgID, &userID, "team", "member_removed",
+		"removed "+member.Email, c.IP(), map[string]string{
+			"removed_user_id": memberID.String(),
+		})
 
 	return c.Status(fiber.StatusNoContent).Send(nil)
 }
