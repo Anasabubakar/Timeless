@@ -91,3 +91,63 @@ func TestSponsorToRecordOmitsCompanyNameWhenNotLoaded(t *testing.T) {
 		t.Error("expected company_name to be omitted when Company wasn't preloaded")
 	}
 }
+
+func TestApplyToCompanyOnlyTouchesPresentFields(t *testing.T) {
+	c := &models.Company{Name: "Old Name", Status: "active", Domain: strp("old.com")}
+	ApplyToCompany(c, map[string]interface{}{"name": "New Name"})
+
+	if c.Name != "New Name" {
+		t.Errorf("name = %q, want New Name", c.Name)
+	}
+	if c.Status != "active" {
+		t.Errorf("status should be untouched, got %q", c.Status)
+	}
+	if c.Domain == nil || *c.Domain != "old.com" {
+		t.Errorf("domain should be untouched, got %v", c.Domain)
+	}
+}
+
+func TestApplyToCompanyIgnoresBlankName(t *testing.T) {
+	c := &models.Company{Name: "Existing"}
+	ApplyToCompany(c, map[string]interface{}{"name": ""})
+	if c.Name != "Existing" {
+		t.Errorf("a blank incoming name should not clobber the existing one, got %q", c.Name)
+	}
+}
+
+func TestApplyToContactUpdatesEmail(t *testing.T) {
+	c := &models.Contact{FirstName: "Ada", LastName: "Lovelace"}
+	ApplyToContact(c, map[string]interface{}{"email": "ada@newmail.com"})
+	if c.Email == nil || *c.Email != "ada@newmail.com" {
+		t.Errorf("email = %v, want ada@newmail.com", c.Email)
+	}
+	if c.FirstName != "Ada" {
+		t.Errorf("first_name should be untouched, got %q", c.FirstName)
+	}
+}
+
+func TestApplyToSponsorHandlesNumericFields(t *testing.T) {
+	s := &models.Sponsor{Stage: "prospect"}
+	ApplyToSponsor(s, map[string]interface{}{
+		"stage":       "negotiation",
+		"deal_value":  50000.0,
+		"probability": 75.0,
+	})
+	if s.Stage != "negotiation" {
+		t.Errorf("stage = %q, want negotiation", s.Stage)
+	}
+	if s.DealValue == nil || *s.DealValue != 50000.0 {
+		t.Errorf("deal_value = %v, want 50000", s.DealValue)
+	}
+	if s.Probability == nil || *s.Probability != 75 {
+		t.Errorf("probability = %v, want 75", s.Probability)
+	}
+}
+
+func TestApplyToSponsorIgnoresUnrecognizedFields(t *testing.T) {
+	s := &models.Sponsor{Stage: "prospect"}
+	ApplyToSponsor(s, map[string]interface{}{"not_a_real_field": "whatever"})
+	if s.Stage != "prospect" {
+		t.Errorf("stage should be untouched, got %q", s.Stage)
+	}
+}
