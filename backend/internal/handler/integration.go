@@ -140,10 +140,19 @@ func (h *IntegrationHandler) Revoke(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
 	}
 
-	if err := h.svc.Revoke(c.Context(), orgID, id); err != nil {
+	provider, err := h.svc.Revoke(c.Context(), orgID, id)
+	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to revoke integration")
 	}
-	return c.SendStatus(fiber.StatusNoContent)
+
+	// Neither Notion's nor Apollo's OAuth API documents a token
+	// revocation endpoint — this call only wipes Timeless's own copy of
+	// the credentials. Say so, rather than letting "revoked" imply a
+	// stronger guarantee (the token invalidated everywhere) than what
+	// actually happened.
+	return c.JSON(fiber.Map{
+		"message": "integration disconnected from Timeless — to fully revoke access, also remove it from your " + provider + " account's connected apps/integrations settings",
+	})
 }
 
 // Dashboard returns connection health, sync history, and job status for

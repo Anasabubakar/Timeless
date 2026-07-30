@@ -86,14 +86,27 @@ func (s *IntegrationService) TriggerSync(ctx context.Context, orgID, userID, id 
 // the stored credentials immediately (so a leaked DB row exposes nothing)
 // and marks status "revoked" so the dashboard and reconnect flow can tell
 // this apart from an integration that was simply never connected.
-func (s *IntegrationService) Revoke(ctx context.Context, orgID, id uuid.UUID) error {
+//
+// This only revokes Timeless's own copy of the credentials — as of this
+// writing, neither Notion's nor Apollo's OAuth API documents a token
+// revocation endpoint (verified via their current docs), so there's no
+// server-to-server call this can make to invalidate the token at the
+// provider itself. The token stops being usable *by Timeless* the
+// instant this runs; whether it's still technically valid at the
+// provider until it naturally expires depends on the provider. Returns
+// the provider name so the caller can surface that distinction instead
+// of implying a stronger guarantee than this actually provides.
+func (s *IntegrationService) Revoke(ctx context.Context, orgID, id uuid.UUID) (provider string, err error) {
 	rec, err := s.repo.GetByID(ctx, orgID, id)
 	if err != nil {
-		return err
+		return "", err
 	}
 	rec.Status = "revoked"
 	rec.Credentials = datatypes.JSON([]byte(`{}`))
-	return s.repo.Update(ctx, rec)
+	if err := s.repo.Update(ctx, rec); err != nil {
+		return "", err
+	}
+	return rec.Provider, nil
 }
 
 // RotateCredentialsResult reports how many of the org's stored credentials
