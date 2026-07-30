@@ -51,10 +51,6 @@ type Config struct {
 	CredentialsEncryptionKey         string   `env:"CREDENTIALS_ENCRYPTION_KEY"`
 	CredentialsEncryptionKeyPrevious []string `env:"CREDENTIALS_ENCRYPTION_KEY_PREVIOUS" envSeparator:","`
 
-	GoogleClientID     string `env:"GOOGLE_CLIENT_ID"`
-	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET"`
-	GoogleRedirectURL  string `env:"GOOGLE_REDIRECT_URL"`
-
 	// Public URL of this API, used to build OAuth redirect URIs.
 	APIPublicURL string `env:"API_PUBLIC_URL" envDefault:"http://localhost:8080"`
 
