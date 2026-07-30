@@ -13,8 +13,10 @@ import (
 	"github.com/timeless/backend/internal/database"
 	"github.com/timeless/backend/internal/eventbus"
 	"github.com/timeless/backend/internal/integration"
+	"github.com/timeless/backend/internal/mapping"
 	"github.com/timeless/backend/internal/repository"
 	"github.com/timeless/backend/internal/security"
+	"github.com/timeless/backend/internal/syncengine"
 	"github.com/timeless/backend/internal/worker"
 )
 
@@ -56,6 +58,7 @@ func main() {
 
 	cipher := security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...)
 	syncRunRepo := repository.NewSyncRunRepository(db)
+	integrationRepo := repository.NewIntegrationRepository(db)
 	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
 
 	// Subscribers register here as features that need to react to
@@ -64,6 +67,30 @@ func main() {
 	// documented no-op per eventbus.Bus, so this is safe to wire now
 	// ahead of any subscriber existing yet.
 	bus := eventbus.NewBus()
+
+	// Notion write-back: entity services (router.Setup) publish
+	// CompanyCreated/Updated/Deleted etc.; syncengine.PushService
+	// subscribes here and, for every org with an active FieldMapping,
+	// translates the current record through mapping.NotionAdapter and
+	// pushes it. Registered on every CRUD event of every syncable
+	// entity type up front — PushService itself no-ops for orgs with no
+	// mapping configured, so this isn't gated on any integration
+	// actually being connected.
+	fieldMappingRepo := repository.NewFieldMappingRepository(db)
+	syncedEntityRepo := repository.NewSyncedEntityRepository(db)
+	syncHistoryRepo := repository.NewSyncHistoryRepository(db)
+	notionClient := integration.NewNotionClient(cfg.NotionClientID, cfg.NotionClientSecret)
+	adapters := map[string]mapping.Adapter{
+		"notion": mapping.NewNotionAdapter(notionClient),
+	}
+	pushSvc := syncengine.NewPushService(db, cipher, fieldMappingRepo, integrationRepo, syncedEntityRepo, syncHistoryRepo, adapters)
+	for _, evt := range []string{
+		eventbus.CompanyCreated, eventbus.CompanyUpdated, eventbus.CompanyDeleted,
+		eventbus.ContactCreated, eventbus.ContactUpdated, eventbus.ContactDeleted,
+		eventbus.SponsorCreated, eventbus.SponsorUpdated, eventbus.SponsorDeleted,
+	} {
+		bus.Subscribe(evt, pushSvc.HandleEvent)
+	}
 
 	mux := asynq.NewServeMux()
 	handlers := worker.NewHandlers(logger, db, cipher, syncRunRepo, registryCfg, bus)
