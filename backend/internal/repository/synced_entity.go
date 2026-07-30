@@ -117,3 +117,16 @@ func (r *SyncHistoryRepository) ListForEntity(ctx context.Context, syncedEntityI
 		Find(&history).Error
 	return history, err
 }
+
+// ListRecentForOrg is the Sync Dashboard's activity feed: every sync
+// action (pushed/pulled/conflict detected/resolved/failed) across every
+// entity and integration in the org, newest first.
+func (r *SyncHistoryRepository) ListRecentForOrg(ctx context.Context, orgID uuid.UUID, limit int) ([]models.SyncHistory, error) {
+	var history []models.SyncHistory
+	err := r.db.WithContext(ctx).
+		Where("organization_id = ?", orgID).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&history).Error
+	return history, err
+}

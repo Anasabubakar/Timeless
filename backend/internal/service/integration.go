@@ -23,6 +23,8 @@ import (
 type IntegrationService struct {
 	repo          *repository.IntegrationRepository
 	syncRunRepo   *repository.SyncRunRepository
+	syncedRepo    *repository.SyncedEntityRepository
+	historyRepo   *repository.SyncHistoryRepository
 	clients       map[string]integration.Client
 	cipher        *security.CredentialCipher
 	worker        *worker.Client
@@ -38,6 +40,15 @@ func NewIntegrationService(repo *repository.IntegrationRepository, syncRunRepo *
 		worker:        workerClient,
 		publicBaseURL: strings.TrimRight(publicBaseURL, "/"),
 	}
+}
+
+// SetSyncRepos wires the mapping-engine sync ledger into the dashboard —
+// optional so existing callers/tests that don't need Sync Dashboard data
+// aren't forced to construct these repos too.
+func (s *IntegrationService) SetSyncRepos(syncedRepo *repository.SyncedEntityRepository, historyRepo *repository.SyncHistoryRepository) *IntegrationService {
+	s.syncedRepo = syncedRepo
+	s.historyRepo = historyRepo
+	return s
 }
 
 func (s *IntegrationService) List(ctx context.Context, orgID uuid.UUID) ([]models.Integration, error) {
@@ -375,12 +386,27 @@ func (s *IntegrationService) ExecuteZapierAction(ctx context.Context, orgID uuid
 }
 
 // DashboardEntry is one integration's health summary for the Integration
-// Dashboard: connection status plus its recent sync history.
+// Dashboard: connection status, recent sync history, and — for
+// integrations the mapping engine covers (Notion today) — per-record
+// sync-ledger counts and conflict/error totals.
 type DashboardEntry struct {
 	Integration models.Integration `json:"integration"`
 	RecentRuns  []models.SyncRun   `json:"recent_runs"`
 	FailedRuns  int64              `json:"failed_runs_24h"`
 	PendingJobs int                `json:"pending_jobs"`
+
+	// SyncedCounts keys by SyncedEntity.SyncState ("synced", "pending",
+	// "conflict", "error") — nil (not an empty map) when the sync ledger
+	// isn't wired in (SetSyncRepos wasn't called) or this integration has
+	// no FieldMapping-driven records at all, so the frontend can tell
+	// "zero records synced" apart from "this feature isn't available
+	// for this integration."
+	SyncedCounts map[string]int64 `json:"synced_counts,omitempty"`
+	// LastWebhookAt is the most recent SyncHistory entry sourced from the
+	// external system (a pull triggered by an inbound webhook) — distinct
+	// from LastSyncAt on the Integration itself, which only reflects
+	// outbound/scheduled polling.
+	LastWebhookAt *time.Time `json:"last_webhook_at,omitempty"`
 }
 
 // Dashboard aggregates connection health, sync history, and job status for
@@ -390,6 +416,11 @@ func (s *IntegrationService) Dashboard(ctx context.Context, orgID uuid.UUID) ([]
 	integrations, err := s.repo.List(ctx, orgID)
 	if err != nil {
 		return nil, err
+	}
+
+	var recentHistory []models.SyncHistory
+	if s.historyRepo != nil {
+		recentHistory, _ = s.historyRepo.ListRecentForOrg(ctx, orgID, 200)
 	}
 
 	entries := make([]DashboardEntry, 0, len(integrations))
@@ -412,14 +443,52 @@ func (s *IntegrationService) Dashboard(ctx context.Context, orgID uuid.UUID) ([]
 			pending = 1
 		}
 
-		entries = append(entries, DashboardEntry{
+		entry := DashboardEntry{
 			Integration: in,
 			RecentRuns:  runs,
 			FailedRuns:  failed,
 			PendingJobs: pending,
-		})
+		}
+
+		if s.syncedRepo != nil {
+			if counts, err := s.syncedRepo.CountByState(ctx, orgID, in.ID); err == nil && len(counts) > 0 {
+				entry.SyncedCounts = counts
+			}
+		}
+		for _, h := range recentHistory {
+			if h.Source != in.Provider {
+				continue
+			}
+			createdAt := h.CreatedAt
+			entry.LastWebhookAt = &createdAt
+			break // newest first (ListRecentForOrg), so the first match is the most recent
+		}
+
+		entries = append(entries, entry)
 	}
 	return entries, nil
+}
+
+// ConflictQueue returns every SyncedEntity across every integration in the
+// org that's currently awaiting conflict resolution — the Sync
+// Dashboard's conflict queue.
+func (s *IntegrationService) ConflictQueue(ctx context.Context, orgID uuid.UUID) ([]models.SyncedEntity, error) {
+	if s.syncedRepo == nil {
+		return nil, nil
+	}
+	return s.syncedRepo.ListConflicts(ctx, orgID)
+}
+
+// RecentSyncActivity returns the org's most recent sync actions across
+// every entity and integration — the Sync Dashboard's activity feed.
+func (s *IntegrationService) RecentSyncActivity(ctx context.Context, orgID uuid.UUID, limit int) ([]models.SyncHistory, error) {
+	if s.historyRepo == nil {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	return s.historyRepo.ListRecentForOrg(ctx, orgID, limit)
 }
 
 func (s *IntegrationService) encryptCredentials(credentials map[string]string) (datatypes.JSON, error) {

@@ -110,6 +110,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	credentialCipher := security.NewCredentialCipher(cfg.CredentialKey(), cfg.CredentialsEncryptionKeyPrevious...)
 	registryCfg := integration.RegistryConfig{NotionClientID: cfg.NotionClientID, NotionClientSecret: cfg.NotionClientSecret}
 	integrationSvc := service.NewIntegrationService(integrationRepo, syncRunRepo, credentialCipher, workerClient, registryCfg, cfg.APIPublicURL)
+	integrationSvc.SetSyncRepos(repository.NewSyncedEntityRepository(db), repository.NewSyncHistoryRepository(db))
 
 	// Event bus: entity services publish here on create/update/delete;
 	// SetPublisher routes every Publish through asynq (same worker queue
@@ -318,6 +319,8 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	integrations := protected.Group("/integrations")
 	integrations.Get("/", integrationHandler.List)
 	integrations.Get("/dashboard", integrationHandler.Dashboard)
+	integrations.Get("/sync/conflicts", integrationHandler.SyncConflicts)
+	integrations.Get("/sync/activity", integrationHandler.SyncActivity)
 	integrations.Get("/zapier/apps", integrationHandler.ZapierApps)
 	integrations.Post("/", integrationHandler.Create)
 	integrations.Get("/:id", integrationHandler.Get)

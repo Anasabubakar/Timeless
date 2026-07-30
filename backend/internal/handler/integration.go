@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -189,6 +190,31 @@ func (h *IntegrationHandler) Dashboard(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to load integration dashboard")
 	}
 	return c.JSON(fiber.Map{"data": entries})
+}
+
+// SyncConflicts returns every record across every integration currently
+// awaiting conflict resolution — both sides changed since the last sync,
+// so nothing was applied automatically.
+func (h *IntegrationHandler) SyncConflicts(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	conflicts, err := h.svc.ConflictQueue(c.Context(), orgID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to load conflict queue")
+	}
+	return c.JSON(fiber.Map{"data": conflicts})
+}
+
+// SyncActivity returns the org's most recent sync actions (pushed/pulled/
+// conflict detected/failed) across every entity and integration — the
+// Sync Dashboard's live activity feed.
+func (h *IntegrationHandler) SyncActivity(c fiber.Ctx) error {
+	orgID := middleware.GetOrgID(c)
+	limit, _ := strconv.Atoi(c.Query("limit", "50"))
+	activity, err := h.svc.RecentSyncActivity(c.Context(), orgID, limit)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to load sync activity")
+	}
+	return c.JSON(fiber.Map{"data": activity})
 }
 
 // ZapierApps returns the third-party apps discovered through the org's
