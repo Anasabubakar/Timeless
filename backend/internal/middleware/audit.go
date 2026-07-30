@@ -24,19 +24,7 @@ func AuditLog(cfg AuditConfig) fiber.Handler {
 		status := c.Response().StatusCode()
 		method := c.Method()
 
-		if method == "GET" || method == "OPTIONS" || method == "HEAD" {
-			return err
-		}
-
-		// 401/403/429 already get their own more specific security event
-		// (auth failure never reaches this middleware at all; RBAC denial
-		// and rate-limit violations log themselves via LogSecurityEvent) —
-		// logging them again here would just be a noisier duplicate. A 5xx
-		// on a mutating request is different: nothing else records that a
-		// write was *attempted* and failed unexpectedly, which is exactly
-		// the kind of thing "data deletion"/"admin actions" audit coverage
-		// is supposed to catch, not just successful ones.
-		if status >= 400 && status < 500 {
+		if !shouldAudit(method, status) {
 			return err
 		}
 
@@ -47,10 +35,7 @@ func AuditLog(cfg AuditConfig) fiber.Handler {
 		}
 
 		path := c.Path()
-		action := mapAction(method)
-		if status >= 500 {
-			action = "failed_" + action
-		}
+		action := mapAction(method, status >= 500)
 		entityType, entityID := parseEntity(path)
 
 		if entityType == "" {
@@ -85,17 +70,33 @@ func AuditLog(cfg AuditConfig) fiber.Handler {
 	}
 }
 
-func mapAction(method string) string {
+// shouldAudit decides whether a request is a candidate for the general
+// audit trail: mutating (not GET/OPTIONS/HEAD), and either succeeded or
+// hit a server error. 401/403/429 are deliberately excluded — auth
+// failure never reaches this middleware at all, and RBAC denial /
+// rate-limit violations already log themselves via LogSecurityEvent, so
+// re-logging them here would just be a noisier duplicate.
+func shouldAudit(method string, status int) bool {
+	if method == "GET" || method == "OPTIONS" || method == "HEAD" {
+		return false
+	}
+	return status < 400 || status >= 500
+}
+
+func mapAction(method string, failed bool) string {
+	action := "modified"
 	switch method {
 	case "POST":
-		return "created"
+		action = "created"
 	case "PATCH", "PUT":
-		return "updated"
+		action = "updated"
 	case "DELETE":
-		return "deleted"
-	default:
-		return "modified"
+		action = "deleted"
 	}
+	if failed {
+		return "failed_" + action
+	}
+	return action
 }
 
 func parseEntity(path string) (string, string) {
