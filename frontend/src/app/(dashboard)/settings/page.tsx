@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Fragment, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   User,
@@ -32,6 +33,7 @@ import {
   useUpdateProfile,
   useChangePassword,
   useTransferOwnership,
+  useDeleteAccount,
 } from "@/queries/settings";
 import {
   useWebhooks,
@@ -908,7 +910,93 @@ function ProfileSettings() {
           </button>
         </div>
       </form>
+
+      <DeleteAccountSection />
     </div>
+  );
+}
+
+function DeleteAccountSection() {
+  const router = useRouter();
+  const deleteAccount = useDeleteAccount();
+  const [password, setPassword] = useState("");
+  const [needsOrgConfirmation, setNeedsOrgConfirmation] = useState(false);
+  const [confirmOrgDeletion, setConfirmOrgDeletion] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleDelete = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (
+      !confirm(
+        needsOrgConfirmation
+          ? "This will permanently delete your account AND your organization, since you're its only member. This cannot be undone. Continue?"
+          : "This will permanently delete your account. This cannot be undone. Continue?"
+      )
+    ) {
+      return;
+    }
+
+    deleteAccount.mutate(
+      { password, confirm_org_deletion: needsOrgConfirmation ? confirmOrgDeletion : undefined },
+      {
+        onSuccess: () => router.push("/login"),
+        onError: (err: any) => {
+          const message = err.message || "Failed to delete account";
+          if (message.includes("only member")) {
+            setNeedsOrgConfirmation(true);
+          }
+          setError(message);
+        },
+      }
+    );
+  };
+
+  return (
+    <SettingsSection title="Danger Zone">
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+        <p className="text-sm font-medium text-destructive">Delete account</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Permanently deletes your account. If you're the only member of your organization, it will be deleted too.
+          If you're the Owner of an organization with other members, transfer ownership first.
+        </p>
+
+        <form onSubmit={handleDelete} className="mt-3 space-y-3">
+          <div className="max-w-xs space-y-1.5">
+            <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300">Confirm your password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="h-9 w-full rounded-[10px] border border-neutral-200 px-3 text-sm outline-none focus:ring-2 focus:ring-destructive/20 dark:border-neutral-700 dark:bg-neutral-900"
+            />
+          </div>
+
+          {needsOrgConfirmation && (
+            <label className="flex items-start gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={confirmOrgDeletion}
+                onChange={(e) => setConfirmOrgDeletion(e.target.checked)}
+                className="mt-0.5"
+              />
+              I understand this will also permanently delete my organization and all of its data.
+            </label>
+          )}
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={deleteAccount.isPending || !password || (needsOrgConfirmation && !confirmOrgDeletion)}
+            className="h-8 rounded-lg bg-destructive px-4 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+          >
+            {deleteAccount.isPending ? "Deleting..." : "Delete my account"}
+          </button>
+        </form>
+      </div>
+    </SettingsSection>
   );
 }
 

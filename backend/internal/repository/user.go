@@ -62,3 +62,20 @@ func (r *UserRepository) ListByOrg(ctx context.Context, orgID uuid.UUID, limit, 
 	err := q.Preload("Roles").Limit(limit).Offset(offset).Order("created_at DESC").Find(&users).Error
 	return users, total, err
 }
+
+// CountByOrg returns the total number of members in an organization —
+// used by account self-deletion to tell "sole member" (deleting them
+// takes the org with them) from "one of several" (deleting an Owner
+// without transferring first would leave the org ownerless).
+func (r *UserRepository) CountByOrg(ctx context.Context, orgID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&models.User{}).Where("organization_id = ?", orgID).Count(&count).Error
+	return count, err
+}
+
+// Delete soft-deletes a user (gorm.Model's DeletedAt), consistent with
+// every other delete path in the app (e.g. team member removal) — the
+// row stays for audit/FK integrity but is excluded from normal queries.
+func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Delete(&models.User{}, "id = ?", id).Error
+}

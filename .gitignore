@@ -8,6 +8,7 @@ out/
 dist/
 bin/
 tmp/
+*.tsbuildinfo
 
 # Environment
 .env

@@ -40,6 +40,7 @@ var routePermissions = map[string]string{
 
 	"PATCH /api/v1/profile":         authOnly,
 	"POST /api/v1/profile/password": authOnly,
+	"POST /api/v1/profile/delete":   authOnly,
 
 	"GET /api/v1/onboarding/state":     authOnly,
 	"PATCH /api/v1/onboarding/state":   authOnly,

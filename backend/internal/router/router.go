@@ -186,6 +186,7 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	profileHandler := handler.NewProfileHandler(userRepo, authSvc)
 	protected.Patch("/profile", profileHandler.Update)
 	protected.Post("/profile/password", profileHandler.ChangePassword)
+	protected.Post("/profile/delete", profileHandler.DeleteAccount, rl.Limit(middleware.RateLimitMFAManage()))
 
 	// Onboarding
 	onboardingRepo := repository.NewOnboardingRepository(db)

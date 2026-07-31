@@ -993,6 +993,87 @@ func (s *AuthService) GetUser(ctx context.Context, userID uuid.UUID) (*models.Us
 	return s.userRepo.FindByID(ctx, userID)
 }
 
+// ErrMustTransferOwnershipFirst blocks a sole-Owner-of-many-members from
+// deleting their own account without first handing Owner to someone else
+// — otherwise the organization would be left with no one able to manage
+// it, settings, invite/remove members, or ever transfer ownership again.
+var ErrMustTransferOwnershipFirst = errors.New("transfer ownership to another member before deleting your account")
+
+// ErrMustConfirmOrgDeletion is returned when an Owner who is also the
+// organization's only member deletes their account without setting
+// ConfirmOrgDeletion — in that case there's no "transfer to" option, so
+// deleting the account necessarily deletes the organization too, and
+// that needs an explicit yes rather than happening as a side effect.
+var ErrMustConfirmOrgDeletion = errors.New("deleting your account will also delete your organization, since you're its only member — confirm to proceed")
+
+type DeleteAccountInput struct {
+	Password string
+	// ConfirmOrgDeletion must be true when the caller is their
+	// organization's sole member (see ErrMustConfirmOrgDeletion).
+	// Ignored otherwise.
+	ConfirmOrgDeletion bool
+}
+
+// DeleteAccount is self-service account deletion: the user proves they
+// still know their password, then their account (and, only if they were
+// their organization's last remaining member, the organization itself)
+// is removed. Sessions are revoked first so a concurrent request on
+// another device can't slip in between the password check and the
+// delete.
+func (s *AuthService) DeleteAccount(ctx context.Context, userID uuid.UUID, input DeleteAccountInput, ip string) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return errors.New("user not found")
+	}
+	if user.PasswordHash == nil || bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(input.Password)) != nil {
+		return errors.New("password is incorrect")
+	}
+
+	isOwner, err := s.roleRepo.HasRole(ctx, user.OrganizationID, userID, ownerRoleName)
+	if err != nil {
+		return fmt.Errorf("failed to verify ownership: %w", err)
+	}
+
+	deleteOrgToo := false
+	if isOwner {
+		memberCount, err := s.userRepo.CountByOrg(ctx, user.OrganizationID)
+		if err != nil {
+			return fmt.Errorf("failed to check organization membership: %w", err)
+		}
+		switch {
+		case memberCount > 1:
+			return ErrMustTransferOwnershipFirst
+		case !input.ConfirmOrgDeletion:
+			return ErrMustConfirmOrgDeletion
+		default:
+			deleteOrgToo = true
+		}
+	}
+
+	if err := s.sessionRepo.RevokeAllForUser(ctx, user.ID); err != nil {
+		log.Printf("auth: failed to revoke sessions for user %s before account deletion: %v", user.ID, err)
+	}
+
+	if err := s.userRepo.Delete(ctx, user.ID); err != nil {
+		return fmt.Errorf("failed to delete account: %w", err)
+	}
+
+	// Audited before the organization delete (not after) so the event
+	// still references a not-yet-deleted org row, and survives even if
+	// the org delete below fails.
+	s.auditAuth(user.OrganizationID, &user.ID, "account_deleted", user.Email+" deleted their account", ip, map[string]string{
+		"organization_also_deleted": strconv.FormatBool(deleteOrgToo),
+	})
+
+	if deleteOrgToo {
+		if err := s.orgRepo.Delete(ctx, user.OrganizationID); err != nil {
+			log.Printf("auth: failed to delete organization %s after its sole member's account deletion: %v", user.OrganizationID, err)
+		}
+	}
+
+	return nil
+}
+
 // MFAEnrollment is returned once, at enrollment time. The plaintext
 // secret and backup codes are never retrievable again — only their
 // encrypted/hashed forms are persisted.

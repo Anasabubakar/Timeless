@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/timeless/backend/internal/middleware"
@@ -87,4 +89,41 @@ func (h *ProfileHandler) ChangePassword(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "password updated — all other sessions have been signed out"})
+}
+
+type deleteAccountBody struct {
+	Password           string `json:"password" validate:"required"`
+	ConfirmOrgDeletion bool   `json:"confirm_org_deletion"`
+}
+
+// DeleteAccount: POST /profile/delete — self-service account deletion.
+// A DELETE verb would be more conventional, but this needs a JSON body
+// (password + confirmation), and DELETE-with-body support is
+// inconsistent enough across clients/proxies that every other
+// password-gated action in this API (ChangePassword above,
+// OrganizationService.UpdateSecure) already uses POST for the same
+// reason.
+func (h *ProfileHandler) DeleteAccount(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+
+	var body deleteAccountBody
+	if verr := reqbind.JSON(c, &body); verr != nil {
+		return verr
+	}
+
+	err := h.authSvc.DeleteAccount(c.Context(), userID, service.DeleteAccountInput{
+		Password:           body.Password,
+		ConfirmOrgDeletion: body.ConfirmOrgDeletion,
+	}, c.IP())
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrMustTransferOwnershipFirst), errors.Is(err, service.ErrMustConfirmOrgDeletion):
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		case err.Error() == "password is incorrect":
+			return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to delete account")
+	}
+
+	return c.JSON(fiber.Map{"message": "your account has been deleted"})
 }

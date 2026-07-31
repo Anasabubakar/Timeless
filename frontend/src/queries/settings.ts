@@ -61,3 +61,24 @@ export function useChangePassword() {
       api.post<{ message: string }>("/profile/password", data),
   });
 }
+
+export interface DeleteAccountInput {
+  password: string;
+  // Required (and must be true) when the caller is their organization's
+  // only member — see AuthService.DeleteAccount. Ignored otherwise.
+  confirm_org_deletion?: boolean;
+}
+
+// useDeleteAccount logs the user out locally on success — the backend
+// has already revoked every session, so there's nothing left to keep
+// around client-side either.
+export function useDeleteAccount() {
+  const { logout } = useAuthStore();
+  return useMutation({
+    mutationFn: (data: DeleteAccountInput) =>
+      api.post<{ message: string }>("/profile/delete", data),
+    onSuccess: () => {
+      logout();
+    },
+  });
+}
