@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -230,6 +231,19 @@ func (s *IntegrationService) Connect(ctx context.Context, orgID, userID uuid.UUI
 		return nil, err
 	}
 
+	// The integration is already connected and persisted at this point —
+	// a failure to enqueue its first sync job is a degraded state (the
+	// initial sync is delayed, not lost: the periodic resync scheduler
+	// and the manual "sync now" action both pick up any connected
+	// integration regardless of whether this enqueue succeeded), not a
+	// reason to report the whole connection as failed. Previously this
+	// returned an error here, which discarded the just-created/updated
+	// `rec` entirely — the caller (OAuthHandler.Callback) would then
+	// redirect with ?error=..., leaving the user looking at a "couldn't
+	// connect" message for an integration that, from the database's
+	// perspective, actually connected successfully. A transient queue
+	// hiccup (Redis blip, connection pool exhaustion) should never make
+	// a real, already-committed connection look like it never happened.
 	if s.worker != nil {
 		if _, err := s.worker.Enqueue(worker.TaskIntegrationSync, worker.TaskPayload{
 			OrgID:      orgID.String(),
@@ -239,7 +253,7 @@ func (s *IntegrationService) Connect(ctx context.Context, orgID, userID uuid.UUI
 			Action:     provider,
 			Data:       map[string]interface{}{"trigger": "connect"},
 		}); err != nil {
-			return nil, fmt.Errorf("enqueue sync job: %w", err)
+			log.Printf("integration: connected %s for org %s but failed to enqueue initial sync (will run on next periodic resync): %v", provider, orgID, err)
 		}
 	}
 
