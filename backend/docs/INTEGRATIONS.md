@@ -189,6 +189,103 @@ behind "never overwrite newer data with stale data." Exposed via
 409 so the frontend can show a specific "this changed in Notion" message
 instead of a generic failure.
 
+## Bidirectional sync: event bus, mapping engine, sync ledger
+
+The pieces above (OAuth, credential encryption, one-off conflict-safe
+write-back) predate a second, event-driven sync layer that now sits on
+top of them. This is the part that makes Notion write-back automatic
+(instead of a capability callers had to invoke manually) and adds real
+inbound Zapier support.
+
+**`internal/eventbus`** — an in-process pub/sub `Bus`. Entity services
+(`CompanyService`, `ContactService`, `SponsorService`) call
+`bus.Publish(...)` on every create/update/delete via a small
+`SetBus`/`publish` helper each one has; this is intentionally *not* part
+of their constructor signature, so nothing outside `router.Setup` (and
+`cmd/worker/main.go`, for the worker's own subscribers) is forced to wire
+a bus through just to construct one of these services in a test.
+`Bus.Publish` routes through `worker.NewEventPublisher` (an asynq
+enqueue) when `SetPublisher` has been called — so an event survives a
+process restart the same way any other background job does — and falls
+back to synchronous in-process dispatch otherwise (what unit tests get by
+default).
+
+**`internal/mapping`** — the `Adapter` interface (`ToExternal`/
+`FromExternal`/`Push`/`Fetch`/`Archive`) plus a Notion implementation
+(`NotionAdapter`), driven entirely by a per-org, user-configured
+`models.FieldMapping` (org + integration + entity type + external
+container id + a JSON array of `{internal_field, external_field,
+external_type, direction}` entries) — never a hardcoded database/property
+ID. `internal/mapping/extract.go` converts real models
+(`CompanyToRecord`/`ContactToRecord`/`SponsorToRecord`) into the generic
+`SyncableRecord` shape adapters work with, and back
+(`ApplyToCompany`/`ApplyToContact`/`ApplyToSponsor`) for the inbound path.
+
+**`internal/syncengine`** — the two subscribers that actually do
+something with events:
+- `PushService` subscribes to every Company/Contact/Sponsor CRUD event,
+  looks up active `FieldMapping`s for that org+entity type, and pushes the
+  *current* record (re-fetched fresh, not the event's payload) through the
+  matching adapter — creating the `SyncedEntity` ledger row on first sync,
+  updating it after. A delete event archives the external record instead
+  of pushing empty fields.
+- `PullService` reacts to `NotionChanged` (published by the webhook
+  receiver — see below) by fetching the changed page and reconciling it
+  against whichever internal entity the `SyncedEntity` ledger says it's
+  linked to. It applies the change locally *unless* the local record was
+  also modified since the last sync, in which case it's marked
+  `sync_state = conflict` instead of guessing a winner. Applying a pulled
+  change writes straight through the repository (not the entity service),
+  specifically so it never re-publishes a CRUD event and ping-pongs the
+  same change back out to Notion.
+- `ZapierIngestService` subscribes to `ZapierWebhookReceived` (see below)
+  and turns a recognized `{"event_type": "contact"|"lead", ...}` payload
+  into a real `Contact`, created *through* `ContactService` — which means
+  it publishes `ContactCreated` like any other creation path, and
+  `PushService` picks it up and syncs it to Notion with no Zapier-specific
+  code in the Notion adapter at all.
+
+**`models.SyncedEntity`** is the per-record ledger this all keys off:
+`(organization_id, entity_type, entity_id, external_system)` uniquely
+identifies one row, tracking `sync_state` (`pending`/`synced`/`conflict`/
+`error`), a logical `version` counter, which side (`source`) produced the
+most recent change, and `last_modified_local`/`last_modified_remote`/
+`last_synced_at` timestamps for conflict detection. `models.SyncHistory`
+is the append-only action log (`pushed_to_remote`, `pulled_from_remote`,
+`conflict_detected`, `conflict_resolved`, `sync_failed`) per ledger row.
+
+## Zapier: inbound webhooks
+
+Unlike Notion, "Webhooks by Zapier" (the inbound trigger a user's Zap
+posts to) has **no signing mechanism at all** — there's no HMAC signature
+to verify, no shared-secret header Zapier itself sends. The entire
+authentication is an unguessable per-org URL token:
+
+1. `POST /integrations/:provider/webhook-token` (authenticated,
+   `integrations:write`) generates a random 32-byte token on first call
+   and stores it in `Integration.WebhookSecret` — the same field Notion's
+   `WebhookURL`/`WebhookSecret` pair already existed for, repurposed here
+   as "the URL segment IS the secret" rather than "a value used to verify
+   someone else's signature." The response (`webhook_url`) should be
+   treated like a credential — it's the org's Zap URL to paste into
+   "Webhooks by Zapier," and it's never re-derivable from the normal
+   integration listing.
+2. `POST /webhooks/zapier/:token` (public) resolves the token to an
+   `active` Integration via `IntegrationByWebhookToken`, rejects anything
+   else with an identical 401 response/timing profile (never a 404 that
+   would let an attacker distinguish "unknown token" from other failure
+   modes), content-hash-dedupes the payload in Redis for 24h (Zapier
+   retries on anything but a 2xx, so a redelivered duplicate is
+   acknowledged without reprocessing), and publishes
+   `ZapierWebhookReceived` with the raw JSON body as `Data` — no inline
+   processing, so a slow/failing downstream subscriber never becomes a
+   slow/failing response to Zapier.
+
+The one payload shape handled out of the box is a new contact/lead (see
+`ZapierIngestService` above); anything else is left alone rather than
+guessed at, but the raw event is still durably queued for a future
+processor to pick up.
+
 ## Apollo: organization enrichment
 
 `ApolloClient.EnrichOrganization` calls `GET /api/v1/organizations/enrich`
@@ -295,6 +392,10 @@ per-run duration and record counts) instead of just a single
 | `POST /companies/dedupe` | On-demand duplicate-company merge |
 | `PATCH /integrations/notion/pages/:pageID` | Conflict-safe write-back to a Notion page |
 | `POST /integrations/notion/webhook` | Notion's real-time event receiver (public, signature-verified) |
+| `GET /integrations/sync/conflicts` | Every `SyncedEntity` awaiting conflict resolution, org-wide |
+| `GET /integrations/sync/activity` | Recent `SyncHistory` entries (pushed/pulled/conflict/failed), org-wide |
+| `POST /integrations/:provider/webhook-token` | Generate (or fetch, if already generated) an inbound webhook URL for a provider with no signing scheme of its own (Zapier) |
+| `POST /webhooks/zapier/:token` | Zapier's inbound event receiver (public, token-in-path authenticated) |
 
 ## Environment variables
 
@@ -341,6 +442,73 @@ against live Notion/Apollo/Zapier accounts during development (not just
 unit tests) — see the "Known limitations" section below for what that
 verification could and couldn't cover in a sandboxed environment.
 
+**Bidirectional sync layer specifically** (`internal/eventbus`,
+`internal/mapping`, `internal/syncengine`): `eventbus.Bus`'s pub/sub fan
+out/aggregate-error behavior, the Notion property (de)serializers,
+`FieldMapping` direction filtering, entity→`SyncableRecord` extraction
+and the inverse `ApplyTo*` merge (only touches fields present in the
+incoming map, never clobbers with a blank value), and
+`ZapierIngestService`'s early-return guards (unrecognized event type,
+no identifying fields, invalid org id) are all covered by ordinary unit
+tests with no external dependencies — see `internal/eventbus/
+eventbus_test.go`, `internal/mapping/{mapping,notion,extract}_test.go`,
+`internal/security/crypto_test.go` (the shared stored-credentials
+encrypt/decrypt helper), and `internal/syncengine/zapier_ingest_test.go`.
+
+What's **not** covered by automated tests in this environment:
+`PushService`/`PullService`'s full DB-backed flows (find-or-create the
+`SyncedEntity` ledger row, apply a pulled change, detect a conflict from
+real `last_modified_local`/`_remote` timestamps) and
+`ZapierWebhookHandler`'s token lookup + Redis dedupe, because both
+require a real Postgres and Redis instance this sandbox doesn't have
+network access to provision (no `miniredis`/sqlite-in-memory harness
+exists in this codebase yet, and this sandbox has no route to
+proxy.golang.org to add one). The logic itself was still written
+defensively and reviewed by hand (see the package doc comments in
+`internal/syncengine`), but "does the SQL actually behave this way
+against a real Postgres" and "does SETNX actually dedupe across two
+near-simultaneous requests" are exactly the kind of thing that should be
+verified against a real staging environment before launch — see the
+manual verification checklist below.
+
+### Manual verification checklist (needs a live environment)
+
+Run this against a staging deployment with real Postgres, Redis, and a
+real Notion workspace + Zapier account connected, before relying on
+bidirectional sync in production:
+
+1. **Notion push**: create a `FieldMapping` for `company` against a real
+   Notion database, create a Company in Timeless, confirm a new page
+   appears in that database with the mapped properties populated, and a
+   `SyncedEntity` row exists with `sync_state = synced`.
+2. **Notion push, update**: edit that Company in Timeless, confirm the
+   Notion page's properties update and `SyncedEntity.version` increments.
+3. **Notion push, delete**: delete the Company, confirm the Notion page
+   is archived (not hard-deleted).
+4. **Notion pull**: edit the property directly in Notion, confirm the
+   webhook fires, `NotionChanged` is published, and the Timeless record
+   updates to match — without re-triggering another outbound push (watch
+   `sync_history` for a `pulled_from_remote` entry, not a ping-ponging
+   pair of `pushed_to_remote`/`pulled_from_remote` entries).
+5. **Conflict**: edit the same record in both Timeless and Notion within
+   the same window without letting either sync first, confirm the ledger
+   row lands in `sync_state = conflict` rather than either side silently
+   winning.
+6. **Zapier inbound**: generate a webhook token via
+   `POST /integrations/zapier/webhook-token`, wire a real Zap's
+   "Webhooks by Zapier" action to POST
+   `{"event_type": "contact", "email": "...", "first_name": "...", ...}`
+   to it, confirm a Contact is created and — if a Notion `FieldMapping`
+   for `contact` exists — that it also appears in Notion, proving the
+   whole Zapier → Timeless → Notion chain works with zero
+   Zapier-specific code in the Notion adapter.
+7. **Zapier duplicate delivery**: replay the same Zapier payload (Zapier
+   itself will do this on any non-2xx response, or trigger it manually)
+   and confirm no duplicate Contact is created.
+8. **Zapier invalid token**: POST to `/webhooks/zapier/some-made-up-token`
+   and confirm a 401 with no information leakage about which tokens are
+   valid.
+
 ## Troubleshooting
 
 - **"oauth_not_configured" on connect**: `NOTION_CLIENT_ID`/`_SECRET` (or
@@ -361,22 +529,37 @@ verification could and couldn't cover in a sandboxed environment.
 
 ## Known limitations
 
-- **Notion write-back isn't wired into every entity update path.** The
-  conflict-safe primitive (`UpdatePageProperties`) and its API endpoint
-  exist and are tested, but automatically pushing every Sponsor/Contact/
-  Company edit back to a linked Notion page requires a persistent
-  entity-to-Notion-page mapping this session didn't build — today it's a
-  capability callers can use, not something that fires on every internal
-  edit automatically.
-- **"Webhooks by Zapier" (inbound Catch Hook receiver) isn't built.**
-  Research confirmed it's the right complementary mechanism to MCP for
-  event-driven flows Zapier's `tools/call` doesn't cover well, but this
-  session focused on the MCP consumption path (SponsorOS calling out
-  through Zapier), not receiving inbound Zap-triggered events.
+- **Notion write-back is now automatic for Company/Contact/Sponsor**,
+  driven by the event bus + mapping engine (see "Bidirectional sync"
+  above) — the earlier limitation here (write-back was a capability
+  callers had to invoke manually) is resolved. It does not yet cover
+  every entity type in the product (Meeting, Task, Project, Note,
+  Proposal, Campaign) — extending `entityLoaders`/`entityStates` in
+  `internal/syncengine` and the corresponding `*ToRecord`/`ApplyTo*`
+  functions in `internal/mapping/extract.go` is additive, not a redesign,
+  when those are needed.
+- **Inbound Zapier webhooks are now built** (see "Zapier: inbound
+  webhooks" above), resolving the earlier limitation here. Only one
+  payload shape is handled by default (new contact/lead) — a Zap sending
+  any other `event_type` is durably queued as `ZapierWebhookReceived` but
+  has no subscriber yet; add one the same way `ZapierIngestService` is
+  wired in `cmd/worker/main.go` when a second shape is needed.
 - **Zapier's classic-mode app grouping is a heuristic.** Zapier doesn't
   document a tool-naming convention, so `appSlugFromAction` guesses at
   app boundaries from name prefixes. Agentic mode (when a user's server
   has it enabled) avoids this by returning real structured data instead.
+- **No automated DB/Redis integration tests for the sync layer** in this
+  environment — see "Testing approach" above for exactly what is and
+  isn't covered, and the manual verification checklist for what to run
+  against a real staging environment before launch.
+- **Conflict resolution has no resolve-it-for-me UI/API yet.** A
+  conflicted `SyncedEntity` is surfaced (dashboard's conflict queue,
+  `GET /integrations/sync/conflicts`) but there's no endpoint to record a
+  decision (`ConflictResolution`/`ConflictDetails` exist on the model,
+  written by nothing yet) — today a human resolves it by editing
+  whichever side should win and waiting for the next sync to pick it up
+  cleanly (the conflict clears the next time push/pull succeeds without
+  detecting another conflict).
 
 ---
 
