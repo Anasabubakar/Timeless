@@ -33,7 +33,7 @@ migrate-create: ## Create a new migration (usage: make migrate-create NAME=add_f
 seed: ## Seed the database with sample data
 	cd backend && go run ./cmd/migrate --seed
 
-resetdev: ## Delete all users and onboarding state from the DEV database (refuses to run outside development)
+resetdev: ## Wipe the ENTIRE DEV database clean - every table, verified empty (refuses to run outside development)
 	cd backend && go run ./cmd/resetdev
 
 # Testing

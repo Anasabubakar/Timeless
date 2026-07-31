@@ -1,5 +1,7 @@
 package middleware
 
+import "fmt"
+
 const (
 	PermCampaignsRead   = "campaigns:read"
 	PermCampaignsWrite  = "campaigns:write"
@@ -158,4 +160,76 @@ var GuestPermissions = []string{
 	PermCompaniesRead,
 	PermContactsRead,
 	PermNotificationsRead,
+}
+
+// permissionDescriptions turns a permission key like "settings:write"
+// into the plain-English action it gates, so a 403 can tell a user what
+// they were trying to do instead of exposing the internal permission
+// name.
+var permissionDescriptions = map[string]string{
+	PermCampaignsRead:        "view campaigns",
+	PermCampaignsWrite:       "create or edit campaigns",
+	PermCampaignsDelete:      "delete campaigns",
+	PermSponsorsRead:         "view sponsors",
+	PermSponsorsWrite:        "create or edit sponsors",
+	PermSponsorsDelete:       "delete sponsors",
+	PermCompaniesRead:        "view companies",
+	PermCompaniesWrite:       "create or edit companies",
+	PermCompaniesDelete:      "delete companies",
+	PermContactsRead:         "view contacts",
+	PermContactsWrite:        "create or edit contacts",
+	PermContactsDelete:       "delete contacts",
+	PermProposalsRead:        "view proposals",
+	PermProposalsWrite:       "create or edit proposals",
+	PermProposalsDelete:      "delete proposals",
+	PermProposalsGenerate:    "generate proposals",
+	PermOutreachRead:         "view outreach sequences",
+	PermOutreachWrite:        "create or edit outreach sequences",
+	PermOutreachDelete:       "delete outreach sequences",
+	PermAutomationsRead:      "view automations",
+	PermAutomationsWrite:     "create or edit automations",
+	PermAutomationsDelete:    "delete automations",
+	PermIntegrationsRead:     "view integrations",
+	PermIntegrationsWrite:    "connect or edit integrations",
+	PermIntegrationsDelete:   "remove integrations",
+	PermWebhooksRead:         "view webhooks",
+	PermWebhooksWrite:        "create or edit webhooks",
+	PermWebhooksDelete:       "delete webhooks",
+	PermAnalyticsRead:        "view analytics",
+	PermAIQuery:              "use the AI assistant",
+	PermSettingsRead:         "view organization settings",
+	PermSettingsWrite:        "change organization settings",
+	PermUsersRead:            "view users",
+	PermUsersWrite:           "create or edit users",
+	PermUsersDelete:          "delete users",
+	PermFilesUpload:          "upload files",
+	PermFilesRead:            "view files",
+	PermFilesDelete:          "delete files",
+	PermActivitiesRead:       "view activity history",
+	PermActivitiesWrite:      "log activity",
+	PermCommunicationsRead:   "view communications",
+	PermCommunicationsWrite:  "send or edit communications",
+	PermCommunicationsDelete: "delete communications",
+	PermKnowledgeRead:        "view the knowledge base",
+	PermKnowledgeWrite:       "edit the knowledge base",
+	PermNotificationsRead:    "view notifications",
+	PermNotificationsWrite:   "manage notifications",
+	PermTeamRead:             "view team members",
+	PermTeamManage:           "manage team members and roles",
+	PermImportsWrite:         "import data",
+	PermEmailsSend:           "send emails",
+}
+
+// permissionDeniedMessage renders a 403 body for a missing permission in
+// plain English, e.g. "You don't have permission to change organization
+// settings. Ask an Owner or Admin in your organization to grant you
+// access." Falls back to a generic phrasing for any permission key not
+// in permissionDescriptions (new permissions added later without an
+// entry here still get a sensible message instead of an error).
+func permissionDeniedMessage(missing string) string {
+	action, ok := permissionDescriptions[missing]
+	if !ok {
+		action = "do that"
+	}
+	return fmt.Sprintf("You don't have permission to %s. Ask an Owner or Admin in your organization to grant you access.", action)
 }

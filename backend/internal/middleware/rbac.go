@@ -24,22 +24,22 @@ func (m *RBACMiddleware) Require(permissions ...string) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		userID := GetUserID(c)
 		if userID == uuid.Nil {
-			return fiber.NewError(fiber.StatusUnauthorized, "authentication required")
+			return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 		}
 
 		orgID := GetOrgID(c)
 		if orgID == uuid.Nil {
-			return fiber.NewError(fiber.StatusForbidden, "organization context required")
+			return fiber.NewError(fiber.StatusForbidden, "We couldn't determine your organization. Try logging in again.")
 		}
 
 		userPerms, err := m.getUserPermissions(userID, orgID)
 		if err != nil {
-			return fiber.NewError(fiber.StatusInternalServerError, "failed to resolve permissions")
+			return fiber.NewError(fiber.StatusInternalServerError, "We couldn't check your permissions right now. Please try again.")
 		}
 
 		if missing, ok := satisfiesAll(userPerms, permissions); !ok {
 			m.logDenial(c, userID, orgID, missing)
-			return fiber.NewError(fiber.StatusForbidden, "insufficient permissions: "+missing)
+			return fiber.NewError(fiber.StatusForbidden, permissionDeniedMessage(missing))
 		}
 
 		return c.Next()
@@ -50,22 +50,22 @@ func (m *RBACMiddleware) RequireAny(permissions ...string) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		userID := GetUserID(c)
 		if userID == uuid.Nil {
-			return fiber.NewError(fiber.StatusUnauthorized, "authentication required")
+			return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 		}
 
 		orgID := GetOrgID(c)
 		if orgID == uuid.Nil {
-			return fiber.NewError(fiber.StatusForbidden, "organization context required")
+			return fiber.NewError(fiber.StatusForbidden, "We couldn't determine your organization. Try logging in again.")
 		}
 
 		userPerms, err := m.getUserPermissions(userID, orgID)
 		if err != nil {
-			return fiber.NewError(fiber.StatusInternalServerError, "failed to resolve permissions")
+			return fiber.NewError(fiber.StatusInternalServerError, "We couldn't check your permissions right now. Please try again.")
 		}
 
 		if !satisfiesAny(userPerms, permissions) {
 			m.logDenial(c, userID, orgID, strings.Join(permissions, " or "))
-			return fiber.NewError(fiber.StatusForbidden, "insufficient permissions")
+			return fiber.NewError(fiber.StatusForbidden, "You don't have permission to do that. Ask an Owner or Admin in your organization to grant you access.")
 		}
 
 		return c.Next()
