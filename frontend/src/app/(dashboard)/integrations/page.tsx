@@ -14,6 +14,8 @@ import {
   ShieldOff,
   Merge,
   KeyRound,
+  GitMerge,
+  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +31,8 @@ import {
   useRotateCredentials,
   useDedupeCompanies,
   useTriggerSync,
+  useSyncConflicts,
+  useSyncActivity,
   type Integration,
   type DashboardEntry,
 } from "@/queries/integrations";
@@ -264,6 +268,8 @@ export default function IntegrationsPage() {
         </div>
       )}
 
+      {integrations.length > 0 && <SyncHealthSection dashboard={dashboard} />}
+
       <AddIntegrationDialog open={showCreate} onOpenChange={setShowCreate} existingProviders={integrations.map((i) => i.provider)} />
       {managingIntegration && (
         <ManageIntegrationDialog
@@ -274,6 +280,113 @@ export default function IntegrationsPage() {
         />
       )}
     </motion.div>
+  );
+}
+
+const SYNC_STATE_COLORS: Record<string, string> = {
+  synced: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+  pending: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+  conflict: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
+  error: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
+};
+
+const SYNC_HISTORY_ACTION_LABELS: Record<string, string> = {
+  pushed_to_remote: "Pushed to remote",
+  pulled_from_remote: "Pulled from remote",
+  conflict_detected: "Conflict detected",
+  conflict_resolved: "Conflict resolved",
+  sync_failed: "Sync failed",
+};
+
+// SyncHealthSection surfaces the mapping-engine sync pipeline's live
+// state — per-integration record counts by sync_state, the conflict
+// queue (both sides changed since the last sync, so nothing was applied
+// automatically), and a recent-activity feed — so a user can see whether
+// bidirectional sync is actually working without digging into logs.
+function SyncHealthSection({ dashboard }: { dashboard: DashboardEntry[] }) {
+  const { data: conflictsData } = useSyncConflicts();
+  const { data: activityData } = useSyncActivity(20);
+
+  const conflicts = conflictsData?.data ?? [];
+  const activity = activityData?.data ?? [];
+  const entriesWithCounts = dashboard.filter((e) => e.synced_counts && Object.keys(e.synced_counts).length > 0);
+
+  if (entriesWithCounts.length === 0 && conflicts.length === 0 && activity.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-sm font-medium text-muted-foreground">Sync health</h2>
+
+      {entriesWithCounts.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {entriesWithCounts.map((entry) => (
+            <Card key={entry.integration.id}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium capitalize">{entry.integration.provider} records</h3>
+                  {entry.last_webhook_at && (
+                    <span className="text-xs text-muted-foreground">Last webhook: {formatLastSync(entry.last_webhook_at)}</span>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {Object.entries(entry.synced_counts ?? {}).map(([state, count]) => (
+                    <Badge key={state} className={SYNC_STATE_COLORS[state] ?? "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"}>
+                      {count} {state}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {conflicts.length > 0 && (
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <GitMerge className="h-4 w-4 text-red-600 dark:text-red-400" />
+              <h3 className="text-sm font-medium">Conflict queue ({conflicts.length})</h3>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              These records changed on both sides since the last sync — nothing was overwritten automatically.
+            </p>
+            <div className="space-y-2">
+              {conflicts.slice(0, 10).map((c) => (
+                <div key={c.id} className="flex items-center justify-between text-xs border-t pt-2 first:border-t-0 first:pt-0">
+                  <span className="capitalize">{c.entity_type} &middot; {c.external_system}</span>
+                  <span className="text-muted-foreground">{c.conflict_state ?? "both_changed"}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activity.length > 0 && (
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Activity className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">Recent sync activity</h3>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {activity.map((h) => (
+                <div key={h.id} className="flex items-center justify-between text-xs border-t pt-2 first:border-t-0 first:pt-0">
+                  <span className={h.error ? "text-red-600 dark:text-red-400" : ""}>
+                    {SYNC_HISTORY_ACTION_LABELS[h.action] ?? h.action}
+                    {h.source ? ` · ${h.source}` : ""}
+                  </span>
+                  <span className="text-muted-foreground">{formatLastSync(h.created_at)}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 

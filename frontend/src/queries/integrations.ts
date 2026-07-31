@@ -36,11 +36,42 @@ export interface DashboardEntry {
   recent_runs: SyncRun[];
   failed_runs_24h: number;
   pending_jobs: number;
+  synced_counts?: Record<string, number>;
+  last_webhook_at?: string;
 }
 
 export interface ConnectedApp {
   slug: string;
   actions: string[];
+}
+
+export interface SyncedEntity {
+  id: string;
+  organization_id: string;
+  integration_id: string;
+  entity_type: string;
+  entity_id: string;
+  external_system: string;
+  external_id: string;
+  sync_state: string;
+  version: number;
+  source: string;
+  last_modified_local?: string;
+  last_modified_remote?: string;
+  last_synced_at?: string;
+  conflict_state?: string;
+  conflict_resolution?: string;
+  last_error?: string;
+}
+
+export interface SyncHistoryEntry {
+  id: string;
+  synced_entity_id: string;
+  organization_id: string;
+  action: string;
+  source: string;
+  error?: string;
+  created_at: string;
 }
 
 export function useIntegrations() {
@@ -67,6 +98,33 @@ export function useIntegrationDashboard() {
     queryKey: ["integrations", "dashboard"],
     queryFn: () => api.get<{ data: DashboardEntry[] }>("/integrations/dashboard"),
     refetchInterval: 5000,
+  });
+}
+
+export function useSyncConflicts() {
+  return useQuery({
+    queryKey: ["integrations", "sync", "conflicts"],
+    queryFn: () => api.get<{ data: SyncedEntity[] }>("/integrations/sync/conflicts"),
+    refetchInterval: 10000,
+  });
+}
+
+export function useSyncActivity(limit = 50) {
+  return useQuery({
+    queryKey: ["integrations", "sync", "activity", limit],
+    queryFn: () => api.get<{ data: SyncHistoryEntry[] }>(`/integrations/sync/activity?limit=${limit}`),
+    refetchInterval: 10000,
+  });
+}
+
+export function useEnableInboundWebhook() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (provider: string) =>
+      api.post<{ webhook_url: string }>(`/integrations/${provider}/webhook-token`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["integrations"] });
+    },
   });
 }
 
