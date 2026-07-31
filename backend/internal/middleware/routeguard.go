@@ -3,6 +3,7 @@ package middleware
 import (
 	"log"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -95,6 +96,8 @@ var routePermissions = map[string]string{
 
 	"GET /api/v1/integrations/":                         PermIntegrationsRead,
 	"GET /api/v1/integrations/dashboard":                PermIntegrationsRead,
+	"GET /api/v1/integrations/sync/conflicts":           PermIntegrationsRead,
+	"GET /api/v1/integrations/sync/activity":            PermIntegrationsRead,
 	"GET /api/v1/integrations/zapier/apps":              PermIntegrationsRead,
 	"POST /api/v1/integrations/":                        PermIntegrationsWrite,
 	"GET /api/v1/integrations/:id":                      PermIntegrationsRead,
@@ -225,6 +228,18 @@ func compileRoutePermissions(perms map[string]string) []compiledRoute {
 		}
 		out = append(out, compiledRoute{method: method, path: path, perm: perm, re: compileRoutePattern(path)})
 	}
+	// Go's map iteration order is randomized per process, so without this
+	// sort, which entry wins when two patterns can both match the same
+	// path (e.g. the literal "/integrations/dashboard" vs the wildcard
+	// "/integrations/:id") would be nondeterministic between runs —
+	// today they happen to require the same permission everywhere this
+	// occurs, but that's a coincidence, not a guarantee, for any future
+	// route added here. Sorting literal (fewer ":") patterns first makes
+	// lookupPermission's "first match wins" deterministic and always
+	// prefers the more specific route.
+	sort.SliceStable(out, func(i, j int) bool {
+		return strings.Count(out[i].path, ":") < strings.Count(out[j].path, ":")
+	})
 	return out
 }
 
