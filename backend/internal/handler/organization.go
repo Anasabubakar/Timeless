@@ -67,7 +67,7 @@ func (h *OrganizationHandler) Update(c fiber.Ctx) error {
 
 	if touchesIdentity {
 		if body.CurrentPassword == "" {
-			return fiber.NewError(fiber.StatusBadRequest, "current_password is required to change name, slug, or password")
+			return fiber.NewError(fiber.StatusBadRequest, "Enter your organization's password to change the name, slug, or password.")
 		}
 		updated, err := h.svc.UpdateSecure(c.Context(), orgID, userID, service.UpdateSecureInput{
 			Name:        body.Name,
@@ -120,7 +120,7 @@ func (h *OrganizationHandler) TransferOwnership(c fiber.Ctx) error {
 	}
 	targetID, err := uuid.Parse(input.NewOwnerID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid new_owner_id")
+		return fiber.NewError(fiber.StatusBadRequest, "That member isn't valid. Please pick a member from the list and try again.")
 	}
 
 	if err := h.svc.TransferOwnership(c.Context(), orgID, userID, targetID, input.CurrentPassword, c.IP()); err != nil {

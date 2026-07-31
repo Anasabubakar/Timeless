@@ -611,15 +611,15 @@ func (s *AuthService) IssueMFAPendingTicket(user *models.User) (string, error) {
 func (s *AuthService) parseMFAPendingTicket(ticket string) (uuid.UUID, error) {
 	tok, err := s.parseJWT(ticket)
 	if err != nil || !tok.Valid {
-		return uuid.Nil, errors.New("invalid or expired mfa ticket")
+		return uuid.Nil, errors.New("Your two-factor verification session has expired. Please log in again.")
 	}
 	claims, ok := tok.Claims.(jwt.MapClaims)
 	if !ok || claims["type"] != "mfa_pending" {
-		return uuid.Nil, errors.New("invalid or expired mfa ticket")
+		return uuid.Nil, errors.New("Your two-factor verification session has expired. Please log in again.")
 	}
 	userID, err := uuid.Parse(claims["sub"].(string))
 	if err != nil {
-		return uuid.Nil, errors.New("invalid or expired mfa ticket")
+		return uuid.Nil, errors.New("Your two-factor verification session has expired. Please log in again.")
 	}
 	return userID, nil
 }
@@ -891,10 +891,10 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, ticket, code string, m
 
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
-		return nil, nil, errors.New("invalid or expired mfa ticket")
+		return nil, nil, errors.New("Your two-factor verification session has expired. Please log in again.")
 	}
 	if !user.MFAEnabled || user.MFASecretEncrypted == nil {
-		return nil, nil, errors.New("mfa is not enabled for this account")
+		return nil, nil, errors.New("Two-factor authentication isn't enabled for this account.")
 	}
 	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
 		return nil, nil, ErrAccountLocked
@@ -902,7 +902,7 @@ func (s *AuthService) VerifyMFALogin(ctx context.Context, ticket, code string, m
 
 	secret, err := s.cipher.Decrypt(*user.MFASecretEncrypted)
 	if err != nil {
-		return nil, nil, errors.New("could not verify mfa code")
+		return nil, nil, errors.New("That verification code didn't work. Please try again.")
 	}
 
 	if security.ValidateTOTP(secret, code) {
@@ -1142,12 +1142,12 @@ func (s *AuthService) ConfirmMFA(ctx context.Context, userID uuid.UUID, code, ip
 		return errors.New("user not found")
 	}
 	if user.MFASecretEncrypted == nil {
-		return errors.New("no pending mfa enrollment")
+		return errors.New("There's no two-factor enrollment in progress. Start enrollment again.")
 	}
 
 	secret, err := s.cipher.Decrypt(*user.MFASecretEncrypted)
 	if err != nil {
-		return errors.New("could not verify mfa secret")
+		return errors.New("That verification code didn't work. Please try again.")
 	}
 	if !security.ValidateTOTP(secret, code) {
 		return errors.New("invalid verification code")

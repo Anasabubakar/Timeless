@@ -25,12 +25,12 @@ func NewAuth(cfg *config.Config) *AuthMiddleware {
 func (m *AuthMiddleware) Handle(c fiber.Ctx) error {
 	auth := c.Get("Authorization")
 	if auth == "" {
-		return fiber.NewError(fiber.StatusUnauthorized, "missing authorization header")
+		return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 	}
 
 	parts := strings.SplitN(auth, " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return fiber.NewError(fiber.StatusUnauthorized, "invalid authorization format")
+		return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 	}
 
 	return m.authenticate(c, parts[1])
@@ -64,12 +64,12 @@ func (m *AuthMiddleware) authenticate(c fiber.Ctx, tokenString string) error {
 		return key, nil
 	})
 	if err != nil || !token.Valid {
-		return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
+		return fiber.NewError(fiber.StatusUnauthorized, "Your session has expired. Please log in again.")
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "invalid token claims")
+		return fiber.NewError(fiber.StatusUnauthorized, "Your session has expired. Please log in again.")
 	}
 
 	c.Locals("user_id", claims["sub"])

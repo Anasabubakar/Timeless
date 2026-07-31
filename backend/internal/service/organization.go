@@ -110,7 +110,7 @@ func (s *OrganizationService) UpdateSecure(ctx context.Context, orgID, actorID u
 	if input.Slug != nil {
 		newSlug := normalize.Slug(*input.Slug)
 		if newSlug == "" {
-			return nil, errors.New("invalid slug")
+			return nil, errors.New("That URL slug isn't valid. Use lowercase letters, numbers, and hyphens only.")
 		}
 		if newSlug != org.Slug {
 			existing, err := s.repo.FindBySlug(ctx, newSlug)

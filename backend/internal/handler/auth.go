@@ -247,7 +247,7 @@ func (h *AuthHandler) VerifyMFALogin(c fiber.Ctx) error {
 func (h *AuthHandler) EnrollMFA(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+		return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 	}
 
 	enrollment, err := h.svc.EnrollMFA(c.Context(), userID)
@@ -265,7 +265,7 @@ type mfaCodeBody struct {
 func (h *AuthHandler) ConfirmMFA(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+		return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 	}
 
 	var body mfaCodeBody
@@ -286,7 +286,7 @@ type passwordOnlyBody struct {
 func (h *AuthHandler) DisableMFA(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+		return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 	}
 
 	var body passwordOnlyBody
@@ -303,7 +303,7 @@ func (h *AuthHandler) DisableMFA(c fiber.Ctx) error {
 func (h *AuthHandler) ListSessions(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+		return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 	}
 
 	sessions, err := h.svc.ListSessions(c.Context(), userID)
@@ -316,7 +316,7 @@ func (h *AuthHandler) ListSessions(c fiber.Ctx) error {
 func (h *AuthHandler) RevokeSession(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+		return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 	}
 
 	sessionID, err := uuid.Parse(c.Params("id"))
@@ -333,7 +333,7 @@ func (h *AuthHandler) RevokeSession(c fiber.Ctx) error {
 func (h *AuthHandler) LogoutAllSessions(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+		return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 	}
 
 	if err := h.svc.LogoutAllSessions(c.Context(), userID, middleware.GetOrgID(c), c.IP()); err != nil {
@@ -345,7 +345,7 @@ func (h *AuthHandler) LogoutAllSessions(c fiber.Ctx) error {
 func (h *AuthHandler) Me(c fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == uuid.Nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+		return fiber.NewError(fiber.StatusUnauthorized, "Please log in to continue.")
 	}
 
 	user, err := h.svc.GetUser(c.Context(), userID)

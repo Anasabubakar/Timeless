@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"github.com/timeless/backend/internal/logging"
 	"github.com/timeless/backend/internal/middleware"
 	"github.com/timeless/backend/internal/models"
 )
@@ -42,10 +43,11 @@ func (h *ImportHandler) importEntity(c fiber.Ctx, entity string) error {
 	reader.FieldsPerRecord = -1
 	records, err := reader.ReadAll()
 	if err != nil && err != io.EOF {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid csv: "+err.Error())
+		logging.Printf("import: csv parse failed for %s: %v", entity, err)
+		return fiber.NewError(fiber.StatusBadRequest, "That file doesn't look like a valid CSV. Check that every row has the same number of columns and try again.")
 	}
 	if len(records) < 2 {
-		return fiber.NewError(fiber.StatusBadRequest, "csv must have a header row and at least one data row")
+		return fiber.NewError(fiber.StatusBadRequest, "That CSV needs a header row plus at least one row of data.")
 	}
 
 	orgID := middleware.GetOrgID(c)
