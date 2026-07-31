@@ -33,6 +33,11 @@ func TestRoutePermissionKnownRoutes(t *testing.T) {
 		{"POST", "/api/v1/ai/query", PermAIQuery, true},
 		{"POST", "/api/v1/onboarding/discovery/run", PermAIQuery, true},
 
+		{"GET", "/api/v1/integrations/dashboard", PermIntegrationsRead, true},
+		{"GET", "/api/v1/integrations/sync/conflicts", PermIntegrationsRead, true},
+		{"GET", "/api/v1/integrations/sync/activity", PermIntegrationsRead, true},
+		{"POST", "/api/v1/integrations/:provider/webhook-token", PermIntegrationsWrite, true},
+
 		{"GET", "/api/v1/team/members", PermTeamRead, true},
 		{"POST", "/api/v1/team/members", PermTeamManage, true},
 		{"DELETE", "/api/v1/team/members/:id", PermTeamManage, true},
