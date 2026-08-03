@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +15,7 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 
+	"github.com/timeless/backend/internal/bootstrap"
 	"github.com/timeless/backend/internal/config"
 	"github.com/timeless/backend/internal/database"
 	"github.com/timeless/backend/internal/middleware"
@@ -52,6 +54,26 @@ func main() {
 		log.Fatalf("failed to create worker client: %v", err)
 	}
 	defer workerClient.Close()
+
+	// EmbedWorker runs the same background-job consumer cmd/worker runs,
+	// inside this process, for deployments that can't afford (or don't
+	// need) a second service — see config.Config.EmbedWorker. Without
+	// this (or a separately deployed cmd/worker), enqueued jobs —
+	// integration syncs, webhook deliveries — sit in Redis forever: the
+	// integrations page shows "syncing" indefinitely because nothing is
+	// ever consuming the queue.
+	var embeddedWorker *bootstrap.WorkerRuntime
+	if cfg.EmbedWorker {
+		workerLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+		embeddedWorker, err = bootstrap.NewWorkerRuntime(cfg, db, workerLogger)
+		if err != nil {
+			log.Fatalf("failed to initialize embedded worker: %v", err)
+		}
+		if err := embeddedWorker.Server.Start(embeddedWorker.Mux); err != nil {
+			log.Fatalf("failed to start embedded worker: %v", err)
+		}
+		log.Println("embedded worker enabled — background jobs process in this instance")
+	}
 
 	app := fiber.New(fiber.Config{
 		AppName:      "Timeless API",
@@ -104,6 +126,11 @@ func main() {
 
 	if err := app.ShutdownWithContext(ctx); err != nil {
 		log.Fatalf("server forced to shutdown: %v", err)
+	}
+
+	if embeddedWorker != nil {
+		embeddedWorker.StopBackgroundGoroutines()
+		embeddedWorker.Server.Shutdown()
 	}
 
 	_ = rdb.Close()

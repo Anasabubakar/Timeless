@@ -93,6 +93,21 @@ type Config struct {
 	// a retention window that fits their compliance requirements.
 	AuditLogRetentionDays int `env:"AUDIT_LOG_RETENTION_DAYS" envDefault:"0"`
 
+	// EmbedWorker runs the background job consumer (integration syncs,
+	// webhook deliveries, periodic resync, stale-run recovery) inside the
+	// API process itself instead of requiring a separate `cmd/worker`
+	// deployment. Off by default — a dedicated worker process is the
+	// better architecture when you can afford one (job processing can't
+	// starve request handling, and either side can scale/restart
+	// independently) — but for a single-dyno deployment that can't run a
+	// second paid service, this is the difference between background
+	// sync jobs actually running and them sitting in the queue forever.
+	// Never enable this on more than one API instance behind the same
+	// Redis: asynq's own distributed locking makes that safe from a
+	// double-processing standpoint, but defeats the purpose of scaling
+	// the API horizontally if every instance is also doing job work.
+	EmbedWorker bool `env:"EMBED_WORKER" envDefault:"false"`
+
 	LogLevel  string `env:"LOG_LEVEL" envDefault:"debug"`
 	LogFormat string `env:"LOG_FORMAT" envDefault:"text"`
 }
