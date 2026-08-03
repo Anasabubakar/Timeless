@@ -67,6 +67,9 @@ func Setup(app *fiber.App, db *gorm.DB, rdb *redis.Client, cfg *config.Config, w
 	if cfg.SendGridKey != "" {
 		emailRegistry.Register(email.NewSendGrid(cfg.SendGridKey))
 	}
+	if cfg.ResendKey != "" {
+		emailRegistry.Register(email.NewResend(cfg.ResendKey))
+	}
 	emailSender := email.NewSender(emailRegistry)
 
 	// Repositories

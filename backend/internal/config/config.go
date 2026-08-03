@@ -77,6 +77,7 @@ type Config struct {
 	SMTPFromName string `env:"SMTP_FROM_NAME" envDefault:"Timeless"`
 	SMTPUseTLS   bool   `env:"SMTP_USE_TLS" envDefault:"false"`
 	SendGridKey  string `env:"SENDGRID_API_KEY"`
+	ResendKey    string `env:"RESEND_API_KEY"`
 
 	S3Endpoint  string `env:"S3_ENDPOINT"`
 	S3Bucket    string `env:"S3_BUCKET" envDefault:"timeless"`
