@@ -42,7 +42,16 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (!token) return;
 
-    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080'}/ws?token=${token}`;
+    // Derived from NEXT_PUBLIC_API_URL rather than a separate
+    // NEXT_PUBLIC_WS_URL — a second URL env var that has to be kept in
+    // sync by hand is exactly the kind of thing that gets set once and
+    // forgotten on the next deploy, which is what happened here: the API
+    // origin was configured correctly, but nothing derived the
+    // WebSocket URL from it, so this fell back to the ws://localhost:8080
+    // dev default in production, which the CSP (rightly) blocked outright.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+    const wsOrigin = apiUrl.replace(/^http/, 'ws').replace(/\/api\/v1\/?$/, '');
+    const wsUrl = `${wsOrigin}/ws?token=${token}`;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {

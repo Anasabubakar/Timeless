@@ -16,6 +16,12 @@ const apiOrigin = (() => {
     return "http://localhost:8080";
   }
 })();
+// The realtime WebSocket connects to the same host as apiOrigin (see
+// useWebSocket, which derives its URL from NEXT_PUBLIC_API_URL) — CSP
+// treats ws(s):// and http(s):// to the same host as distinct connect-src
+// entries, so listing only the https origin here silently blocks the
+// WebSocket regardless of what URL the app code actually points at.
+const wsOrigin = apiOrigin.replace(/^http/, "ws");
 
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
@@ -30,7 +36,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self' data:",
-      `connect-src 'self' ${apiOrigin}${isDev ? " ws://localhost:*" : ""}`,
+      `connect-src 'self' ${apiOrigin} ${wsOrigin}${isDev ? " ws://localhost:*" : ""}`,
       "object-src 'none'",
       "base-uri 'self'",
       "frame-ancestors 'none'",
